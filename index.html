@@ -76,7 +76,6 @@
     let portfolio = JSON.parse(localStorage.getItem('twStockPortfolio')) || [];
     let marketData = {};
 
-    // 抓取政府資料
     async function fetchGovData(url) {
         const timestamp = new Date().getTime();
         const targetUrl = encodeURIComponent(url + '?_t=' + timestamp);
@@ -90,7 +89,6 @@
         return null;
     }
 
-    // 初始化市場名稱資料
     async function initMarketData() {
         const statusEl = document.getElementById('status');
         statusEl.innerHTML = '⏳ 正在連線政府資料庫...';
@@ -128,11 +126,10 @@
         }
     }
 
-    // 渲染表格與計算
     async function renderTable() {
         const statusEl = document.getElementById('status');
         if(portfolio.length > 0) {
-            statusEl.innerHTML = '🔄 正在精準同步最新報價與配息...';
+            statusEl.innerHTML = '🔄 正在精準同步最新報價與配息紀錄...';
             statusEl.style.color = '#007bff';
         }
 
@@ -148,9 +145,10 @@
             const stockInfo = marketData[record.symbol] || { name: '未知', market: 'TW', price: record.buyPrice };
             const suffix = stockInfo.market === 'TWO' ? '.TWO' : '.TW';
             
-            // 強制破除快取，獲取最新價格與配息
+            // 【修復點】：加入 range=1y 讓 Yahoo 吐出過去一年的除息紀錄
             const ts = new Date().getTime();
-            const chartUrl = encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${record.symbol}${suffix}?interval=1d&events=div&_t=${ts}`);
+            const chartUrl = encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${record.symbol}${suffix}?range=1y&interval=1d&events=div&_t=${ts}`);
+            
             let currentPrice = stockInfo.price;
             let divText = '<span style="color:#999;">查無近期配息</span>';
             let divAmount = 0;
@@ -161,9 +159,9 @@
                     const data = await res.json();
                     if (data.chart && data.chart.result) {
                         const result = data.chart.result[0];
-                        currentPrice = result.meta.regularMarketPrice || currentPrice; // 確保是最新的收盤價
+                        currentPrice = result.meta.regularMarketPrice || currentPrice; 
                         
-                        // 抓取近期配息紀錄
+                        // 解析過去一年的配息紀錄
                         if (result.events && result.events.dividends) {
                             const divs = Object.values(result.events.dividends).sort((a, b) => b.date - a.date);
                             if (divs.length > 0) {
@@ -177,7 +175,6 @@
                 }
             } catch(e) {}
 
-            // 費用計算 (無折扣 = discount 1.0)
             const baseCost = record.shares * record.buyPrice;
             const buyFee = Math.max(20, Math.floor(baseCost * 0.001425 * discount));
             const realTotalCost = baseCost + buyFee; 
@@ -193,7 +190,6 @@
             const plClass = netPl >= 0 ? 'profit' : 'loss';
             const plSign = netPl >= 0 ? '+' : '';
             
-            // 試算可領股利
             const estDividend = Math.floor(record.shares * divAmount);
             const estDividendText = estDividend > 0 ? `<span style="color:#28a745; font-weight:bold; font-size:1.1em;">$${estDividend.toLocaleString()}</span>` : '-';
 
