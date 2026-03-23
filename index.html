@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>台股損益紀錄本</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; max-width: 1000px; margin: auto; background-color: #f9f9f9; }
+        .container { background-color: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        input, button { padding: 8px; margin-right: 10px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px; }
+        .btn-primary { background-color: #007bff; color: white; border: none; cursor: pointer; }
+        .btn-primary:hover { background-color: #0056b3; }
+        .btn-danger { background-color: #dc3545; color: white; border: none; cursor: pointer; padding: 5px 10px; border-radius: 3px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { border: 1px solid #eee; padding: 12px; text-align: right; }
+        th { background-color: #f2f2f2; text-align: center; }
+        td:first-child, td:nth-child(2) { text-align: left; font-weight: bold; }
+        td.action-cell { text-align: center; }
+        .profit { color: #28a745; font-weight: bold; }
+        .loss { color: #dc3545; font-weight: bold; }
+        #status { margin-bottom: 15px; color: #666; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>新增台股交易紀錄</h2>
+    <div id="status">正在從證交所與櫃買中心載入資料...</div>
+    
+    <input type="text" id="symbol" placeholder="輸入台股代號 (例: 2330)" required>
+    <input type="number" id="shares" placeholder="購買股數" required>
+    <input type="number" id="buyPrice" placeholder="買進均價" required step="0.01">
+    <button id="addBtn" class="btn-primary" onclick="addRecord()" disabled>新增至紀錄</button>
+
+    <hr>
+    <h2>我的投資組合</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>代號</th>
+                <th>名稱</th>
+                <th>持有股數</th>
+                <th>買進均價</th>
+                <th>最新收盤價</th>
+                <th>投入總成本</th>
+                <th>目前總市值</th>
+                <th>未實現損益</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+    </table>
+</div>
+
+<script>
+    let portfolio = JSON.parse(localStorage.getItem('twStockPortfolio')) || [];
+    let marketData = {};
+
+    async function initMarketData() {
+        try {
+            const twseRes = await fetch('https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL');
+            const twseJson = await twseRes.json();
+            twseJson.forEach(stock => {
+                marketData[stock.Code] = { name: stock.Name, price: parseFloat(stock.ClosingPrice) };
+            });
+
+            const tpexRes = await fetch('https://www.tpex.org.tw/openapi/v1/t187ap14_L');
+            const tpexJson = await tpexRes.json();
+            tpexJson.forEach(stock => {
+                marketData[stock.SecuritiesCompanyCode] = { name: stock.CompanyName, price: parseFloat(stock.Close) };
+            });
+
+            document.getElementById('status').innerHTML = '✅ 市場資料載入完成！';
+            document.getElementById('addBtn').disabled = false; 
+            renderTable();
+        } catch (error) {
+            document.getElementById('status').innerHTML = '❌ 載入失敗，請確認已部署至線上環境。';
+        }
+    }
+
+    function addRecord() {
+        const symbol = document.getElementById('symbol').value.trim();
+        const shares = parseFloat(document.getElementById('shares').value);
+        const buyPrice = parseFloat(document.getElementById('buyPrice').value);
+
+        if (!marketData[symbol]) {
+            alert(`找不到代號 ${symbol} 的資料`); return;
+        }
+
+        portfolio.push({ symbol, shares, buyPrice });
+        localStorage.setItem('twStockPortfolio', JSON.stringify(portfolio));
+        renderTable();
+    }
+
+    function deleteRecord(index) {
+        portfolio.splice(index, 1);
+        localStorage.setItem('twStockPortfolio', JSON.stringify(portfolio));
+        renderTable();
+    }
+
+    function renderTable() {
+        const tbody = document.getElementById('tableBody');
+        tbody.innerHTML = '';
+        let totalCostAll = 0, totalValueAll = 0;
+
+        portfolio.forEach((record, index) => {
+            const currentPrice = marketData[record.symbol]?.price || record.buyPrice;
+            const name = marketData[record.symbol]?.name || '未知';
+            const cost = record.shares * record.buyPrice;
+            const value = record.shares * currentPrice;
+            const pl = value - cost;
+            
+            totalCostAll += cost; totalValueAll += value;
+
+            tbody.innerHTML += `
+                <tr>
+                    <td>${record.symbol}</td><td>${name}</td><td>${record.shares}</td>
+                    <td>${record.buyPrice}</td><td>${currentPrice}</td>
+                    <td>${Math.round(cost).toLocaleString()}</td><td>${Math.round(value).toLocaleString()}</td>
+                    <td class="${pl >= 0 ? 'profit' : 'loss'}">${pl >= 0 ? '+' : ''}${Math.round(pl).toLocaleString()}</td>
+                    <td class="action-cell"><button class="btn-danger" onclick="deleteRecord(${index})">刪除</button></td>
+                </tr>
+            `;
+        });
+    }
+
+    initMarketData();
+</script>
+</body>
+</html>
