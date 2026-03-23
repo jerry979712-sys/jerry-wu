@@ -27,7 +27,7 @@
 
 <div class="container">
     <h2>新增台股交易紀錄</h2>
-    <div id="status">正在切換備用線路，從證交所載入資料中...</div>
+    <div id="status">正在強制獲取今日最新報價中...</div>
     
     <input type="text" id="symbol" placeholder="輸入台股代號 (例: 2330)" required>
     <input type="number" id="shares" placeholder="購買股數" required>
@@ -58,7 +58,6 @@
     let portfolio = JSON.parse(localStorage.getItem('twStockPortfolio')) || [];
     let marketData = {};
 
-    // 多重備用伺服器機制
     async function fetchWithFallback(url) {
         const proxies = [
             'https://api.codetabs.com/v1/proxy?quest=',
@@ -73,7 +72,7 @@
                     return await res.json();
                 }
             } catch (e) {
-                console.warn('代理伺服器連線失敗，自動切換下一個...');
+                console.warn('代理連線失敗，自動切換...');
             }
         }
         throw new Error('所有連線皆失敗');
@@ -82,10 +81,13 @@
     async function initMarketData() {
         let loaded = 0;
         const statusEl = document.getElementById('status');
+        
+        // 【關鍵修改】：產生當下時間的毫秒數，加在網址後面騙過代理伺服器的快取
+        const timestamp = new Date().getTime(); 
 
-        // 1. 抓取上市資料
+        // 1. 抓取上市資料 (強制更新)
         try {
-            const twseData = await fetchWithFallback('https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL');
+            const twseData = await fetchWithFallback(`https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL?_t=${timestamp}`);
             twseData.forEach(stock => {
                 marketData[stock.Code] = { name: stock.Name, price: parseFloat(stock.ClosingPrice) };
             });
@@ -94,9 +96,9 @@
             console.error('上市資料失敗');
         }
 
-        // 2. 抓取上櫃資料
+        // 2. 抓取上櫃資料 (強制更新)
         try {
-            const tpexData = await fetchWithFallback('https://www.tpex.org.tw/openapi/v1/t187ap14_L');
+            const tpexData = await fetchWithFallback(`https://www.tpex.org.tw/openapi/v1/t187ap14_L?_t=${timestamp}`);
             tpexData.forEach(stock => {
                 marketData[stock.SecuritiesCompanyCode] = { name: stock.CompanyName, price: parseFloat(stock.Close) };
             });
@@ -105,14 +107,13 @@
             console.error('上櫃資料失敗');
         }
 
-        // 判斷結果
         if (loaded > 0) {
-            statusEl.innerHTML = '✅ 資料載入成功！可以開始輸入（如：00878、2330）來記帳了。';
+            statusEl.innerHTML = '✅ 取得最新市場資料成功！價格已強制同步。';
             statusEl.style.color = '#28a745';
             document.getElementById('addBtn').disabled = false;
             renderTable();
         } else {
-            statusEl.innerHTML = '❌ 載入失敗。請按鍵盤「F12」切換到「Console(主控台)」，拍下紅色的錯誤訊息給我看。';
+            statusEl.innerHTML = '❌ 載入失敗。請稍後再試。';
             statusEl.style.color = '#dc3545';
         }
     }
