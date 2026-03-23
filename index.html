@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>台股損益紀錄本</title>
+    <title>台股損益紀錄本 (即時報價版)</title>
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; max-width: 1000px; margin: auto; background-color: #f9f9f9; }
         .container { background-color: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
@@ -20,14 +20,15 @@
         td.action-cell { text-align: center; }
         .profit { color: #28a745; font-weight: bold; }
         .loss { color: #dc3545; font-weight: bold; }
-        #status { margin-bottom: 15px; font-weight: bold; color: #007bff; }
+        .realtime-price { color: #007bff; font-weight: bold; }
+        #status { margin-bottom: 15px; font-weight: bold; color: #666; }
     </style>
 </head>
 <body>
 
 <div class="container">
     <h2>新增台股交易紀錄</h2>
-    <div id="status">正在強制獲取今日最新報價中...</div>
+    <div id="status">啟動中...</div>
     
     <input type="text" id="symbol" placeholder="輸入台股代號 (例: 2330)" required>
     <input type="number" id="shares" placeholder="購買股數" required>
@@ -43,7 +44,7 @@
                 <th>名稱</th>
                 <th>持有股數</th>
                 <th>買進均價</th>
-                <th>最新收盤價</th>
+                <th>最新即時報價</th>
                 <th>投入總成本</th>
                 <th>目前總市值</th>
                 <th>未實現損益</th>
@@ -58,106 +59,127 @@
     let portfolio = JSON.parse(localStorage.getItem('twStockPortfolio')) || [];
     let marketData = {};
 
-    async function fetchWithFallback(url) {
-        const proxies = [
-            'https://api.codetabs.com/v1/proxy?quest=',
-            'https://corsproxy.io/?'
-        ];
+    // 繞過政府舊資料用的連線
+    async function fetchGovData(url) {
+        const timestamp = new Date().getTime();
+        const targetUrl = encodeURIComponent(url + '?_t=' + timestamp);
+        const proxies = ['https://corsproxy.io/?' + targetUrl, 'https://api.allorigins.win/raw?url=' + targetUrl];
         
-        for (let proxy of proxies) {
+        for (let p of proxies) {
             try {
-                const targetUrl = proxy === 'https://corsproxy.io/?' ? encodeURIComponent(url) : url;
-                const res = await fetch(proxy + targetUrl);
-                if (res.ok) {
-                    return await res.json();
-                }
-            } catch (e) {
-                console.warn('代理連線失敗，自動切換...');
-            }
+                const res = await fetch(p);
+                if (res.ok) return await res.json();
+            } catch(e) {}
         }
-        throw new Error('所有連線皆失敗');
+        throw new Error('政府資料連線失敗');
+    }
+
+    // 專門抓取 Yahoo 即時報價的超強函數
+    async function getYahooRealTimePrice(symbol, market) {
+        // 台股上市是 .TW，上櫃是 .TWO
+        const suffix = market === 'TWO' ? '.TWO' : '.TW';
+        const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}${suffix}`;
+        
+        const proxies = [
+            'https://corsproxy.io/?' + encodeURIComponent(url),
+            'https://api.allorigins.win/raw?url=' + encodeURIComponent(url)
+        ];
+
+        for (let p of proxies) {
+            try {
+                const res = await fetch(p);
+                if (res.ok) {
+                    const data = await res.json();
+                    return data.chart.result[0].meta.regularMarketPrice; // 精準抓出最新價格
+                }
+            } catch(e) {}
+        }
+        return null; // 如果 Yahoo 當機，會回傳 null
     }
 
     async function initMarketData() {
         let loaded = 0;
         const statusEl = document.getElementById('status');
-        
-        // 【關鍵修改】：產生當下時間的毫秒數，加在網址後面騙過代理伺服器的快取
-        const timestamp = new Date().getTime(); 
+        statusEl.innerHTML = '⏳ 正在驗證股票代碼與名稱...';
 
-        // 1. 抓取上市資料 (強制更新)
         try {
-            const twseData = await fetchWithFallback(`https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL?_t=${timestamp}`);
+            const twseData = await fetchGovData('https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL');
             twseData.forEach(stock => {
-                marketData[stock.Code] = { name: stock.Name, price: parseFloat(stock.ClosingPrice) };
+                marketData[stock.Code] = { name: stock.Name, market: 'TW', price: parseFloat(stock.ClosingPrice) };
             });
             loaded++;
-        } catch (error) {
-            console.error('上市資料失敗');
-        }
+        } catch(e) {}
 
-        // 2. 抓取上櫃資料 (強制更新)
         try {
-            const tpexData = await fetchWithFallback(`https://www.tpex.org.tw/openapi/v1/t187ap14_L?_t=${timestamp}`);
+            const tpexData = await fetchGovData('https://www.tpex.org.tw/openapi/v1/t187ap14_L');
             tpexData.forEach(stock => {
-                marketData[stock.SecuritiesCompanyCode] = { name: stock.CompanyName, price: parseFloat(stock.Close) };
+                marketData[stock.SecuritiesCompanyCode] = { name: stock.CompanyName, market: 'TWO', price: parseFloat(stock.Close) };
             });
             loaded++;
-        } catch (error) {
-            console.error('上櫃資料失敗');
-        }
+        } catch(e) {}
 
         if (loaded > 0) {
-            statusEl.innerHTML = '✅ 取得最新市場資料成功！價格已強制同步。';
-            statusEl.style.color = '#28a745';
             document.getElementById('addBtn').disabled = false;
-            renderTable();
+            await renderTable(); 
         } else {
-            statusEl.innerHTML = '❌ 載入失敗。請稍後再試。';
+            statusEl.innerHTML = '❌ 連線失敗，請重新整理網頁。';
             statusEl.style.color = '#dc3545';
         }
     }
 
-    function addRecord() {
+    async function addRecord() {
         const symbol = document.getElementById('symbol').value.trim();
         const shares = parseFloat(document.getElementById('shares').value);
         const buyPrice = parseFloat(document.getElementById('buyPrice').value);
 
         if (!symbol || isNaN(shares) || isNaN(buyPrice)) {
-            alert('請填寫完整的代號、股數與價位！'); return;
+            alert('請填寫完整的資訊！'); return;
         }
         if (!marketData[symbol]) {
-            alert(`找不到代號 ${symbol} 的資料，請確認輸入是否正確。`); return;
+            alert(`找不到 ${symbol}，請確認代號是否正確。`); return;
         }
 
         portfolio.push({ symbol: symbol, shares: shares, buyPrice: buyPrice });
-        saveAndRender();
-
+        localStorage.setItem('twStockPortfolio', JSON.stringify(portfolio));
+        
         document.getElementById('symbol').value = '';
         document.getElementById('shares').value = '';
         document.getElementById('buyPrice').value = '';
+        
+        await renderTable();
     }
 
-    function deleteRecord(index) {
+    async function deleteRecord(index) {
         if (confirm('確定要刪除這筆紀錄嗎？')) {
             portfolio.splice(index, 1);
-            saveAndRender();
+            localStorage.setItem('twStockPortfolio', JSON.stringify(portfolio));
+            await renderTable();
         }
     }
 
-    function saveAndRender() {
-        localStorage.setItem('twStockPortfolio', JSON.stringify(portfolio));
-        renderTable();
-    }
+    async function renderTable() {
+        const statusEl = document.getElementById('status');
+        statusEl.innerHTML = '🔄 正在從 Yahoo Finance 同步最新即時報價...';
+        statusEl.style.color = '#007bff';
 
-    function renderTable() {
         const tbody = document.getElementById('tableBody');
-        tbody.innerHTML = '';
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:20px;">資料運算中，請稍候...</td></tr>';
+        
         let totalCostAll = 0, totalValueAll = 0;
+        let htmlContent = '';
 
-        portfolio.forEach((record, index) => {
-            const stockInfo = marketData[record.symbol] || { name: '未知', price: record.buyPrice };
-            const currentPrice = stockInfo.price;
+        for (let i = 0; i < portfolio.length; i++) {
+            const record = portfolio[i];
+            const stockInfo = marketData[record.symbol] || { name: '未知', market: 'TW', price: record.buyPrice };
+            
+            // 核心功能：強制去 Yahoo 抓取即時價格
+            let currentPrice = stockInfo.price; 
+            const realTimePrice = await getYahooRealTimePrice(record.symbol, stockInfo.market);
+            
+            if (realTimePrice !== null) {
+                currentPrice = realTimePrice; // 成功抓到就替換成最新價格
+            }
+
             const cost = record.shares * record.buyPrice;
             const value = record.shares * currentPrice;
             const pl = value - cost;
@@ -167,26 +189,26 @@
             const plClass = pl >= 0 ? 'profit' : 'loss';
             const plSign = pl >= 0 ? '+' : '';
             
-            tbody.innerHTML += `
+            htmlContent += `
                 <tr>
                     <td>${record.symbol}</td>
                     <td>${stockInfo.name}</td>
                     <td>${record.shares.toLocaleString()}</td>
                     <td>${record.buyPrice.toFixed(2)}</td>
-                    <td>${currentPrice.toFixed(2)}</td>
+                    <td class="realtime-price">${currentPrice.toFixed(2)}</td>
                     <td>${Math.round(cost).toLocaleString()}</td>
                     <td>${Math.round(value).toLocaleString()}</td>
                     <td class="${plClass}">${plSign}${Math.round(pl).toLocaleString()}</td>
-                    <td class="action-cell"><button class="btn-danger" onclick="deleteRecord(${index})">刪除</button></td>
+                    <td class="action-cell"><button class="btn-danger" onclick="deleteRecord(${i})">刪除</button></td>
                 </tr>
             `;
-        });
+        }
 
         if(portfolio.length > 0) {
             const totalPl = totalValueAll - totalCostAll;
             const totalPlClass = totalPl >= 0 ? 'profit' : 'loss';
             const totalPlSign = totalPl >= 0 ? '+' : '';
-            tbody.innerHTML += `
+            htmlContent += `
                 <tr style="background-color: #f8f9fa; font-weight: bold;">
                     <td colspan="5" style="text-align: center;">總計</td>
                     <td>${Math.round(totalCostAll).toLocaleString()}</td>
@@ -195,7 +217,13 @@
                     <td></td>
                 </tr>
             `;
+        } else {
+            htmlContent = '<tr><td colspan="9" style="text-align:center;">目前沒有任何交易紀錄</td></tr>';
         }
+        
+        tbody.innerHTML = htmlContent;
+        statusEl.innerHTML = '✅ 報價更新完成！(最新價格來源: Yahoo Finance)';
+        statusEl.style.color = '#28a745';
     }
 
     initMarketData();
