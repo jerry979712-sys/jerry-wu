@@ -3,18 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>台股損益紀錄本 (即時報價版)</title>
+    <title>台股損益紀錄本 (含手續費精算版)</title>
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; max-width: 1000px; margin: auto; background-color: #f9f9f9; }
         .container { background-color: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        input, button { padding: 8px; margin-right: 10px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px; }
+        .input-group { margin-bottom: 15px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+        input, button { padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+        .setting-box { background-color: #f1f8ff; padding: 10px; border-radius: 4px; border: 1px solid #cce5ff; margin-bottom: 15px; font-size: 0.9em; }
         .btn-primary { background-color: #007bff; color: white; border: none; cursor: pointer; }
         .btn-primary:hover { background-color: #0056b3; }
         .btn-primary:disabled { background-color: #cccccc; cursor: not-allowed; }
         .btn-danger { background-color: #dc3545; color: white; border: none; cursor: pointer; padding: 5px 10px; border-radius: 3px; font-size: 0.9em; }
         .btn-danger:hover { background-color: #c82333; }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th, td { border: 1px solid #eee; padding: 12px; text-align: right; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.95em; }
+        th, td { border: 1px solid #eee; padding: 10px; text-align: right; }
         th { background-color: #f2f2f2; text-align: center; }
         td:first-child, td:nth-child(2) { text-align: left; font-weight: bold; }
         td.action-cell { text-align: center; }
@@ -22,6 +24,7 @@
         .loss { color: #dc3545; font-weight: bold; }
         .realtime-price { color: #007bff; font-weight: bold; }
         #status { margin-bottom: 15px; font-weight: bold; color: #666; }
+        .fee-hint { font-size: 0.8em; color: #888; display: block; margin-top: 5px; }
     </style>
 </head>
 <body>
@@ -30,13 +33,21 @@
     <h2>新增台股交易紀錄</h2>
     <div id="status">啟動中...</div>
     
-    <input type="text" id="symbol" placeholder="輸入台股代號 (例: 2330)" required>
-    <input type="number" id="shares" placeholder="購買股數" required>
-    <input type="number" id="buyPrice" placeholder="買進均價" required step="0.01">
-    <button id="addBtn" class="btn-primary" onclick="addRecord()" disabled>新增至紀錄</button>
+    <div class="setting-box">
+        <label for="discount">⚙️ 券商手續費折數設定 (台新電子下單預設約2折)：</label>
+        <input type="number" id="discount" value="0.2" step="0.01" style="width: 80px;" onchange="renderTable()">
+        <span style="color: #666;">(若為 2 折請填 0.2，若為 2.8 折請填 0.28。修改後表格會自動重新精算)</span>
+    </div>
+
+    <div class="input-group">
+        <input type="text" id="symbol" placeholder="代號 (例: 2330)" required style="width: 120px;">
+        <input type="number" id="shares" placeholder="股數 (1張=1000)" required style="width: 130px;">
+        <input type="number" id="buyPrice" placeholder="買進均價" required step="0.01" style="width: 120px;">
+        <button id="addBtn" class="btn-primary" onclick="addRecord()" disabled>新增至紀錄</button>
+    </div>
 
     <hr>
-    <h2>我的投資組合</h2>
+    <h2>我的投資組合 <span style="font-size: 0.6em; color: #888; font-weight: normal;">(包含買進手續費、預估賣出手續費與證交稅)</span></h2>
     <table>
         <thead>
             <tr>
@@ -45,9 +56,9 @@
                 <th>持有股數</th>
                 <th>買進均價</th>
                 <th>最新即時報價</th>
-                <th>投入總成本</th>
+                <th>實際總成本<br><span style="font-size: 0.8em; font-weight: normal;">(含手續費)</span></th>
                 <th>目前總市值</th>
-                <th>未實現損益</th>
+                <th>預估淨損益<br><span style="font-size: 0.8em; font-weight: normal;">(扣除所有費稅)</span></th>
                 <th>操作</th>
             </tr>
         </thead>
@@ -59,7 +70,6 @@
     let portfolio = JSON.parse(localStorage.getItem('twStockPortfolio')) || [];
     let marketData = {};
 
-    // 繞過政府舊資料用的連線
     async function fetchGovData(url) {
         const timestamp = new Date().getTime();
         const targetUrl = encodeURIComponent(url + '?_t=' + timestamp);
@@ -74,12 +84,9 @@
         throw new Error('政府資料連線失敗');
     }
 
-    // 專門抓取 Yahoo 即時報價的超強函數
     async function getYahooRealTimePrice(symbol, market) {
-        // 台股上市是 .TW，上櫃是 .TWO
         const suffix = market === 'TWO' ? '.TWO' : '.TW';
         const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}${suffix}`;
-        
         const proxies = [
             'https://corsproxy.io/?' + encodeURIComponent(url),
             'https://api.allorigins.win/raw?url=' + encodeURIComponent(url)
@@ -90,11 +97,11 @@
                 const res = await fetch(p);
                 if (res.ok) {
                     const data = await res.json();
-                    return data.chart.result[0].meta.regularMarketPrice; // 精準抓出最新價格
+                    return data.chart.result[0].meta.regularMarketPrice;
                 }
             } catch(e) {}
         }
-        return null; // 如果 Yahoo 當機，會回傳 null
+        return null;
     }
 
     async function initMarketData() {
@@ -159,35 +166,57 @@
 
     async function renderTable() {
         const statusEl = document.getElementById('status');
-        statusEl.innerHTML = '🔄 正在從 Yahoo Finance 同步最新即時報價...';
-        statusEl.style.color = '#007bff';
+        if(portfolio.length > 0) {
+            statusEl.innerHTML = '🔄 正在從 Yahoo Finance 同步最新即時報價與精算手續費...';
+            statusEl.style.color = '#007bff';
+        }
 
         const tbody = document.getElementById('tableBody');
         tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:20px;">資料運算中，請稍候...</td></tr>';
         
-        let totalCostAll = 0, totalValueAll = 0;
+        // 取得使用者設定的手續費折數
+        const discountInput = document.getElementById('discount').value;
+        const discount = parseFloat(discountInput) || 1.0; 
+
+        let totalCostAll = 0, totalValueAll = 0, totalNetPlAll = 0;
         let htmlContent = '';
 
         for (let i = 0; i < portfolio.length; i++) {
             const record = portfolio[i];
             const stockInfo = marketData[record.symbol] || { name: '未知', market: 'TW', price: record.buyPrice };
             
-            // 核心功能：強制去 Yahoo 抓取即時價格
             let currentPrice = stockInfo.price; 
             const realTimePrice = await getYahooRealTimePrice(record.symbol, stockInfo.market);
-            
             if (realTimePrice !== null) {
-                currentPrice = realTimePrice; // 成功抓到就替換成最新價格
+                currentPrice = realTimePrice;
             }
 
-            const cost = record.shares * record.buyPrice;
-            const value = record.shares * currentPrice;
-            const pl = value - cost;
+            // === 核心費率計算邏輯 ===
+            const baseCost = record.shares * record.buyPrice;
+            // 買進手續費 (0.1425% * 折數，低收20元)
+            let buyFee = Math.floor(baseCost * 0.001425 * discount);
+            buyFee = Math.max(20, buyFee);
+            const realTotalCost = baseCost + buyFee; // 實際付出的總成本
 
-            totalCostAll += cost; totalValueAll += value;
+            const baseValue = record.shares * currentPrice;
+            // 預估賣出手續費
+            let sellFee = Math.floor(baseValue * 0.001425 * discount);
+            sellFee = Math.max(20, sellFee);
+            
+            // 預估賣出證交稅 (ETF為0.1%，一般股票為0.3%)
+            const isETF = record.symbol.startsWith('00');
+            const taxRate = isETF ? 0.001 : 0.003;
+            const sellTax = Math.floor(baseValue * taxRate);
 
-            const plClass = pl >= 0 ? 'profit' : 'loss';
-            const plSign = pl >= 0 ? '+' : '';
+            // 淨損益 = 賣出總值 - 賣出手續費 - 賣出稅 - 買進實際總成本
+            const netPl = baseValue - sellFee - sellTax - realTotalCost;
+
+            totalCostAll += realTotalCost; 
+            totalValueAll += baseValue;
+            totalNetPlAll += netPl;
+
+            const plClass = netPl >= 0 ? 'profit' : 'loss';
+            const plSign = netPl >= 0 ? '+' : '';
             
             htmlContent += `
                 <tr>
@@ -196,24 +225,26 @@
                     <td>${record.shares.toLocaleString()}</td>
                     <td>${record.buyPrice.toFixed(2)}</td>
                     <td class="realtime-price">${currentPrice.toFixed(2)}</td>
-                    <td>${Math.round(cost).toLocaleString()}</td>
-                    <td>${Math.round(value).toLocaleString()}</td>
-                    <td class="${plClass}">${plSign}${Math.round(pl).toLocaleString()}</td>
+                    <td>${Math.round(realTotalCost).toLocaleString()}</td>
+                    <td>${Math.round(baseValue).toLocaleString()}</td>
+                    <td class="${plClass}">
+                        ${plSign}${Math.round(netPl).toLocaleString()}
+                        <span class="fee-hint">(已扣費稅: ${sellFee + sellTax}元)</span>
+                    </td>
                     <td class="action-cell"><button class="btn-danger" onclick="deleteRecord(${i})">刪除</button></td>
                 </tr>
             `;
         }
 
         if(portfolio.length > 0) {
-            const totalPl = totalValueAll - totalCostAll;
-            const totalPlClass = totalPl >= 0 ? 'profit' : 'loss';
-            const totalPlSign = totalPl >= 0 ? '+' : '';
+            const totalPlClass = totalNetPlAll >= 0 ? 'profit' : 'loss';
+            const totalPlSign = totalNetPlAll >= 0 ? '+' : '';
             htmlContent += `
                 <tr style="background-color: #f8f9fa; font-weight: bold;">
                     <td colspan="5" style="text-align: center;">總計</td>
                     <td>${Math.round(totalCostAll).toLocaleString()}</td>
                     <td>${Math.round(totalValueAll).toLocaleString()}</td>
-                    <td class="${totalPlClass}">${totalPlSign}${Math.round(totalPl).toLocaleString()}</td>
+                    <td class="${totalPlClass}">${totalPlSign}${Math.round(totalNetPlAll).toLocaleString()}</td>
                     <td></td>
                 </tr>
             `;
@@ -222,7 +253,7 @@
         }
         
         tbody.innerHTML = htmlContent;
-        statusEl.innerHTML = '✅ 報價更新完成！(最新價格來源: Yahoo Finance)';
+        statusEl.innerHTML = '✅ 即時報價與手續費精算完成！';
         statusEl.style.color = '#28a745';
     }
 
