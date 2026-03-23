@@ -20,14 +20,14 @@
         td.action-cell { text-align: center; }
         .profit { color: #28a745; font-weight: bold; }
         .loss { color: #dc3545; font-weight: bold; }
-        #status { margin-bottom: 15px; font-weight: bold; color: #666; }
+        #status { margin-bottom: 15px; font-weight: bold; color: #007bff; }
     </style>
 </head>
 <body>
 
 <div class="container">
     <h2>新增台股交易紀錄</h2>
-    <div id="status">正在透過代理伺服器從證交所載入資料...</div>
+    <div id="status">正在切換備用線路，從證交所載入資料中...</div>
     
     <input type="text" id="symbol" placeholder="輸入台股代號 (例: 2330)" required>
     <input type="number" id="shares" placeholder="購買股數" required>
@@ -58,37 +58,61 @@
     let portfolio = JSON.parse(localStorage.getItem('twStockPortfolio')) || [];
     let marketData = {};
 
-    async function initMarketData() {
-        try {
-            // 使用 allorigins 作為代理伺服器來繞過證交所的 CORS 阻擋
-            const proxy = 'https://api.allorigins.win/raw?url=';
-            const twseUrl = encodeURIComponent('https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL');
-            const tpexUrl = encodeURIComponent('https://www.tpex.org.tw/openapi/v1/t187ap14_L');
+    // 多重備用伺服器機制
+    async function fetchWithFallback(url) {
+        const proxies = [
+            'https://api.codetabs.com/v1/proxy?quest=',
+            'https://corsproxy.io/?'
+        ];
+        
+        for (let proxy of proxies) {
+            try {
+                const targetUrl = proxy === 'https://corsproxy.io/?' ? encodeURIComponent(url) : url;
+                const res = await fetch(proxy + targetUrl);
+                if (res.ok) {
+                    return await res.json();
+                }
+            } catch (e) {
+                console.warn('代理伺服器連線失敗，自動切換下一個...');
+            }
+        }
+        throw new Error('所有連線皆失敗');
+    }
 
-            // 抓取上市資料
-            const twseRes = await fetch(proxy + twseUrl);
-            const twseJson = await twseRes.json();
-            twseJson.forEach(stock => {
+    async function initMarketData() {
+        let loaded = 0;
+        const statusEl = document.getElementById('status');
+
+        // 1. 抓取上市資料
+        try {
+            const twseData = await fetchWithFallback('https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL');
+            twseData.forEach(stock => {
                 marketData[stock.Code] = { name: stock.Name, price: parseFloat(stock.ClosingPrice) };
             });
+            loaded++;
+        } catch (error) {
+            console.error('上市資料失敗');
+        }
 
-            // 抓取上櫃資料
-            const tpexRes = await fetch(proxy + tpexUrl);
-            const tpexJson = await tpexRes.json();
-            tpexJson.forEach(stock => {
+        // 2. 抓取上櫃資料
+        try {
+            const tpexData = await fetchWithFallback('https://www.tpex.org.tw/openapi/v1/t187ap14_L');
+            tpexData.forEach(stock => {
                 marketData[stock.SecuritiesCompanyCode] = { name: stock.CompanyName, price: parseFloat(stock.Close) };
             });
-
-            const statusEl = document.getElementById('status');
-            statusEl.innerHTML = '✅ 市場資料載入完成！可以開始記帳了。';
-            statusEl.style.color = '#28a745';
-            document.getElementById('addBtn').disabled = false; 
-            
-            renderTable();
+            loaded++;
         } catch (error) {
-            console.error('載入失敗:', error);
-            const statusEl = document.getElementById('status');
-            statusEl.innerHTML = '❌ 載入失敗，請重新整理網頁再試一次。';
+            console.error('上櫃資料失敗');
+        }
+
+        // 判斷結果
+        if (loaded > 0) {
+            statusEl.innerHTML = '✅ 資料載入成功！可以開始輸入（如：00878、2330）來記帳了。';
+            statusEl.style.color = '#28a745';
+            document.getElementById('addBtn').disabled = false;
+            renderTable();
+        } else {
+            statusEl.innerHTML = '❌ 載入失敗。請按鍵盤「F12」切換到「Console(主控台)」，拍下紅色的錯誤訊息給我看。';
             statusEl.style.color = '#dc3545';
         }
     }
@@ -99,13 +123,10 @@
         const buyPrice = parseFloat(document.getElementById('buyPrice').value);
 
         if (!symbol || isNaN(shares) || isNaN(buyPrice)) {
-            alert('請填寫完整的代號、股數與價位！');
-            return;
+            alert('請填寫完整的代號、股數與價位！'); return;
         }
-
         if (!marketData[symbol]) {
-            alert(`找不到代號 ${symbol} 的資料，請確認輸入是否正確。`);
-            return;
+            alert(`找不到代號 ${symbol} 的資料，請確認輸入是否正確。`); return;
         }
 
         portfolio.push({ symbol: symbol, shares: shares, buyPrice: buyPrice });
@@ -131,20 +152,16 @@
     function renderTable() {
         const tbody = document.getElementById('tableBody');
         tbody.innerHTML = '';
-        
-        let totalCostAll = 0;
-        let totalValueAll = 0;
+        let totalCostAll = 0, totalValueAll = 0;
 
         portfolio.forEach((record, index) => {
             const stockInfo = marketData[record.symbol] || { name: '未知', price: record.buyPrice };
             const currentPrice = stockInfo.price;
-            
             const cost = record.shares * record.buyPrice;
             const value = record.shares * currentPrice;
             const pl = value - cost;
 
-            totalCostAll += cost;
-            totalValueAll += value;
+            totalCostAll += cost; totalValueAll += value;
 
             const plClass = pl >= 0 ? 'profit' : 'loss';
             const plSign = pl >= 0 ? '+' : '';
@@ -159,9 +176,7 @@
                     <td>${Math.round(cost).toLocaleString()}</td>
                     <td>${Math.round(value).toLocaleString()}</td>
                     <td class="${plClass}">${plSign}${Math.round(pl).toLocaleString()}</td>
-                    <td class="action-cell">
-                        <button class="btn-danger" onclick="deleteRecord(${index})">刪除</button>
-                    </td>
+                    <td class="action-cell"><button class="btn-danger" onclick="deleteRecord(${index})">刪除</button></td>
                 </tr>
             `;
         });
