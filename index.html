@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>台股損益紀錄本 (含手續費精算版)</title>
+    <title>台股損益紀錄本 (配息與新聞版)</title>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; max-width: 1000px; margin: auto; background-color: #f9f9f9; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; max-width: 1100px; margin: auto; background-color: #f9f9f9; }
         .container { background-color: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         .input-group { margin-bottom: 15px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
         input, button { padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
@@ -13,18 +13,22 @@
         .btn-primary { background-color: #007bff; color: white; border: none; cursor: pointer; }
         .btn-primary:hover { background-color: #0056b3; }
         .btn-primary:disabled { background-color: #cccccc; cursor: not-allowed; }
-        .btn-danger { background-color: #dc3545; color: white; border: none; cursor: pointer; padding: 5px 10px; border-radius: 3px; font-size: 0.9em; }
+        .btn-danger { background-color: #dc3545; color: white; border: none; cursor: pointer; padding: 4px 8px; border-radius: 3px; font-size: 0.85em; margin-top: 4px; }
         .btn-danger:hover { background-color: #c82333; }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.95em; }
-        th, td { border: 1px solid #eee; padding: 10px; text-align: right; }
+        .btn-info { background-color: #17a2b8; color: white; border: none; cursor: pointer; padding: 4px 8px; border-radius: 3px; font-size: 0.85em; text-decoration: none; display: inline-block; margin-right: 4px; }
+        .btn-info:hover { background-color: #138496; }
+        .btn-calc { background-color: #ffc107; color: #333; border: none; cursor: pointer; padding: 4px 8px; border-radius: 3px; font-size: 0.85em; font-weight: bold; }
+        .btn-calc:hover { background-color: #e0a800; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.9em; }
+        th, td { border: 1px solid #eee; padding: 10px; text-align: right; vertical-align: middle; }
         th { background-color: #f2f2f2; text-align: center; }
         td:first-child, td:nth-child(2) { text-align: left; font-weight: bold; }
-        td.action-cell { text-align: center; }
+        td.action-cell { text-align: center; white-space: nowrap; }
         .profit { color: #28a745; font-weight: bold; }
         .loss { color: #dc3545; font-weight: bold; }
         .realtime-price { color: #007bff; font-weight: bold; }
         #status { margin-bottom: 15px; font-weight: bold; color: #666; }
-        .fee-hint { font-size: 0.8em; color: #888; display: block; margin-top: 5px; }
+        .fee-hint { font-size: 0.8em; color: #888; display: block; margin-top: 5px; font-weight: normal; }
     </style>
 </head>
 <body>
@@ -34,20 +38,20 @@
     <div id="status">啟動中...</div>
     
     <div class="setting-box">
-        <label for="discount">⚙️ 券商手續費折數設定 (台新電子下單預設約2折)：</label>
+        <label for="discount">⚙️ 券商手續費折數設定：</label>
         <input type="number" id="discount" value="0.2" step="0.01" style="width: 80px;" onchange="renderTable()">
-        <span style="color: #666;">(若為 2 折請填 0.2，若為 2.8 折請填 0.28。修改後表格會自動重新精算)</span>
+        <span style="color: #666;">(台新電子下單預設約2折，請填 0.2)</span>
     </div>
 
     <div class="input-group">
-        <input type="text" id="symbol" placeholder="代號 (例: 2330)" required style="width: 120px;">
-        <input type="number" id="shares" placeholder="股數 (1張=1000)" required style="width: 130px;">
+        <input type="text" id="symbol" placeholder="代號 (例: 00878)" required style="width: 130px;">
+        <input type="number" id="shares" placeholder="股數 (1張=1000)" required style="width: 140px;">
         <input type="number" id="buyPrice" placeholder="買進均價" required step="0.01" style="width: 120px;">
         <button id="addBtn" class="btn-primary" onclick="addRecord()" disabled>新增至紀錄</button>
     </div>
 
     <hr>
-    <h2>我的投資組合 <span style="font-size: 0.6em; color: #888; font-weight: normal;">(包含買進手續費、預估賣出手續費與證交稅)</span></h2>
+    <h2>我的投資組合</h2>
     <table>
         <thead>
             <tr>
@@ -55,11 +59,11 @@
                 <th>名稱</th>
                 <th>持有股數</th>
                 <th>買進均價</th>
-                <th>最新即時報價</th>
-                <th>實際總成本<br><span style="font-size: 0.8em; font-weight: normal;">(含手續費)</span></th>
+                <th>即時報價</th>
+                <th>總成本<br><span class="fee-hint">(含買進手續費)</span></th>
                 <th>目前總市值</th>
-                <th>預估淨損益<br><span style="font-size: 0.8em; font-weight: normal;">(扣除所有費稅)</span></th>
-                <th>操作</th>
+                <th>預估淨損益<br><span class="fee-hint">(已扣賣出費/稅)</span></th>
+                <th>實用資訊與操作</th>
             </tr>
         </thead>
         <tbody id="tableBody"></tbody>
@@ -87,10 +91,7 @@
     async function getYahooRealTimePrice(symbol, market) {
         const suffix = market === 'TWO' ? '.TWO' : '.TW';
         const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}${suffix}`;
-        const proxies = [
-            'https://corsproxy.io/?' + encodeURIComponent(url),
-            'https://api.allorigins.win/raw?url=' + encodeURIComponent(url)
-        ];
+        const proxies = ['https://corsproxy.io/?' + encodeURIComponent(url), 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url)];
 
         for (let p of proxies) {
             try {
@@ -111,17 +112,13 @@
 
         try {
             const twseData = await fetchGovData('https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL');
-            twseData.forEach(stock => {
-                marketData[stock.Code] = { name: stock.Name, market: 'TW', price: parseFloat(stock.ClosingPrice) };
-            });
+            twseData.forEach(stock => { marketData[stock.Code] = { name: stock.Name, market: 'TW', price: parseFloat(stock.ClosingPrice) }; });
             loaded++;
         } catch(e) {}
 
         try {
             const tpexData = await fetchGovData('https://www.tpex.org.tw/openapi/v1/t187ap14_L');
-            tpexData.forEach(stock => {
-                marketData[stock.SecuritiesCompanyCode] = { name: stock.CompanyName, market: 'TWO', price: parseFloat(stock.Close) };
-            });
+            tpexData.forEach(stock => { marketData[stock.SecuritiesCompanyCode] = { name: stock.CompanyName, market: 'TWO', price: parseFloat(stock.Close) }; });
             loaded++;
         } catch(e) {}
 
@@ -139,20 +136,13 @@
         const shares = parseFloat(document.getElementById('shares').value);
         const buyPrice = parseFloat(document.getElementById('buyPrice').value);
 
-        if (!symbol || isNaN(shares) || isNaN(buyPrice)) {
-            alert('請填寫完整的資訊！'); return;
-        }
-        if (!marketData[symbol]) {
-            alert(`找不到 ${symbol}，請確認代號是否正確。`); return;
-        }
+        if (!symbol || isNaN(shares) || isNaN(buyPrice)) { alert('請填寫完整的資訊！'); return; }
+        if (!marketData[symbol]) { alert(`找不到 ${symbol}，請確認代號是否正確。`); return; }
 
         portfolio.push({ symbol: symbol, shares: shares, buyPrice: buyPrice });
         localStorage.setItem('twStockPortfolio', JSON.stringify(portfolio));
         
-        document.getElementById('symbol').value = '';
-        document.getElementById('shares').value = '';
-        document.getElementById('buyPrice').value = '';
-        
+        document.getElementById('symbol').value = ''; document.getElementById('shares').value = ''; document.getElementById('buyPrice').value = '';
         await renderTable();
     }
 
@@ -164,17 +154,30 @@
         }
     }
 
+    // 計算配息的小工具
+    function calculateDividend(symbol, shares) {
+        const amount = prompt(`請輸入 ${symbol} 預計每股配發的金額 (元)：\n(例如查到配息 0.51，請輸入 0.51)`);
+        if (amount !== null && amount !== "") {
+            const parsedAmount = parseFloat(amount);
+            if (!isNaN(parsedAmount)) {
+                const totalDividend = Math.round(shares * parsedAmount);
+                alert(`💰 試算結果：\n\n您持有的 ${symbol} (${shares} 股)\n若每股配發 ${parsedAmount} 元\n\n預計可領取現金股利： ${totalDividend.toLocaleString()} 元！`);
+            } else {
+                alert("輸入的金額格式不正確，請輸入數字。");
+            }
+        }
+    }
+
     async function renderTable() {
         const statusEl = document.getElementById('status');
         if(portfolio.length > 0) {
-            statusEl.innerHTML = '🔄 正在從 Yahoo Finance 同步最新即時報價與精算手續費...';
+            statusEl.innerHTML = '🔄 正在同步即時報價與精算手續費...';
             statusEl.style.color = '#007bff';
         }
 
         const tbody = document.getElementById('tableBody');
         tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:20px;">資料運算中，請稍候...</td></tr>';
         
-        // 取得使用者設定的手續費折數
         const discountInput = document.getElementById('discount').value;
         const discount = parseFloat(discountInput) || 1.0; 
 
@@ -187,37 +190,27 @@
             
             let currentPrice = stockInfo.price; 
             const realTimePrice = await getYahooRealTimePrice(record.symbol, stockInfo.market);
-            if (realTimePrice !== null) {
-                currentPrice = realTimePrice;
-            }
+            if (realTimePrice !== null) currentPrice = realTimePrice;
 
-            // === 核心費率計算邏輯 ===
             const baseCost = record.shares * record.buyPrice;
-            // 買進手續費 (0.1425% * 折數，低收20元)
-            let buyFee = Math.floor(baseCost * 0.001425 * discount);
-            buyFee = Math.max(20, buyFee);
-            const realTotalCost = baseCost + buyFee; // 實際付出的總成本
+            let buyFee = Math.max(20, Math.floor(baseCost * 0.001425 * discount));
+            const realTotalCost = baseCost + buyFee; 
 
             const baseValue = record.shares * currentPrice;
-            // 預估賣出手續費
-            let sellFee = Math.floor(baseValue * 0.001425 * discount);
-            sellFee = Math.max(20, sellFee);
-            
-            // 預估賣出證交稅 (ETF為0.1%，一般股票為0.3%)
-            const isETF = record.symbol.startsWith('00');
-            const taxRate = isETF ? 0.001 : 0.003;
+            let sellFee = Math.max(20, Math.floor(baseValue * 0.001425 * discount));
+            const taxRate = record.symbol.startsWith('00') ? 0.001 : 0.003;
             const sellTax = Math.floor(baseValue * taxRate);
-
-            // 淨損益 = 賣出總值 - 賣出手續費 - 賣出稅 - 買進實際總成本
             const netPl = baseValue - sellFee - sellTax - realTotalCost;
 
-            totalCostAll += realTotalCost; 
-            totalValueAll += baseValue;
-            totalNetPlAll += netPl;
+            totalCostAll += realTotalCost; totalValueAll += baseValue; totalNetPlAll += netPl;
 
             const plClass = netPl >= 0 ? 'profit' : 'loss';
             const plSign = netPl >= 0 ? '+' : '';
             
+            // Yahoo 奇摩的專屬連結
+            const dividendUrl = `https://tw.stock.yahoo.com/quote/${record.symbol}/dividend`;
+            const newsUrl = `https://tw.stock.yahoo.com/quote/${record.symbol}/news`;
+
             htmlContent += `
                 <tr>
                     <td>${record.symbol}</td>
@@ -231,7 +224,16 @@
                         ${plSign}${Math.round(netPl).toLocaleString()}
                         <span class="fee-hint">(已扣費稅: ${sellFee + sellTax}元)</span>
                     </td>
-                    <td class="action-cell"><button class="btn-danger" onclick="deleteRecord(${i})">刪除</button></td>
+                    <td class="action-cell">
+                        <div>
+                            <a href="${newsUrl}" target="_blank" class="btn-info">📰 新聞</a>
+                            <a href="${dividendUrl}" target="_blank" class="btn-info">📅 除權息</a>
+                        </div>
+                        <div style="margin-top: 5px;">
+                            <button class="btn-calc" onclick="calculateDividend('${record.symbol}', ${record.shares})">💰 算配息</button>
+                            <button class="btn-danger" onclick="deleteRecord(${i})">刪除</button>
+                        </div>
+                    </td>
                 </tr>
             `;
         }
@@ -253,7 +255,7 @@
         }
         
         tbody.innerHTML = htmlContent;
-        statusEl.innerHTML = '✅ 即時報價與手續費精算完成！';
+        statusEl.innerHTML = '✅ 即時報價同步完成！點擊右側按鈕可查閱最新消息。';
         statusEl.style.color = '#28a745';
     }
 
