@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>台股損益與配息追蹤系統</title>
+    <title>台股損益與配息紀錄本</title>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; max-width: 1200px; margin: auto; background-color: #f9f9f9; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; max-width: 1100px; margin: auto; background-color: #f9f9f9; }
         .container { background-color: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         .input-group { margin-bottom: 15px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
         input, select, button { padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
@@ -15,44 +15,42 @@
         .btn-primary:disabled { background-color: #cccccc; cursor: not-allowed; }
         .btn-danger { background-color: #dc3545; color: white; border: none; cursor: pointer; padding: 5px 10px; border-radius: 3px; font-size: 0.85em; }
         .btn-danger:hover { background-color: #c82333; }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.9em; }
-        th, td { border: 1px solid #eee; padding: 10px; text-align: right; vertical-align: middle; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.95em; }
+        th, td { border: 1px solid #eee; padding: 12px 10px; text-align: right; vertical-align: middle; }
         th { background-color: #f2f2f2; text-align: center; }
         td:first-child, td:nth-child(2) { text-align: left; font-weight: bold; }
         td.action-cell { text-align: center; }
         .profit { color: #28a745; font-weight: bold; }
         .loss { color: #dc3545; font-weight: bold; }
-        .realtime-price { color: #007bff; font-weight: bold; font-size: 1.1em; }
-        .news-link { color: #333; text-decoration: none; font-size: 0.85em; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-align: left; }
-        .news-link:hover { color: #007bff; text-decoration: underline; }
-        .div-info { font-size: 0.85em; color: #d35400; font-weight: bold; text-align: center;}
+        .realtime-price { color: #007bff; font-weight: bold; font-size: 1.05em; }
+        .div-info { font-size: 0.9em; color: #555; text-align: center; line-height: 1.4; }
+        .div-amount { color: #d35400; font-weight: bold; }
         #status { margin-bottom: 15px; font-weight: bold; color: #666; }
-        .fee-hint { font-size: 0.8em; color: #888; display: block; margin-top: 3px; font-weight: normal; }
+        .fee-hint { font-size: 0.8em; color: #888; display: block; margin-top: 4px; font-weight: normal; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2>📈 台股損益與配息追蹤系統</h2>
+    <h2>台股損益與配息紀錄本</h2>
     <div id="status">啟動中...</div>
     
     <div class="setting-box">
         <label for="discount">⚙️ 券商手續費設定：</label>
         <select id="discount" onchange="renderTable()">
-            <option value="1.0" selected>無手續費折扣 (全額收取)</option>
+            <option value="1.0" selected>無折扣 (全額收取手續費)</option>
             <option value="0.5">5 折</option>
             <option value="0.28">2.8 折</option>
             <option value="0.2">2 折</option>
-            <option value="0.0">免手續費 (0元)</option>
         </select>
-        <span style="color: #666; margin-left: 10px;">(預設為無折扣，系統會自動包含千分之3或千分之1的證交稅)</span>
+        <span style="color: #666; margin-left: 10px;">(系統會自動扣除買賣手續費與證交稅)</span>
     </div>
 
     <div class="input-group">
         <input type="text" id="symbol" placeholder="代號 (例: 00878)" required style="width: 130px;">
         <input type="number" id="shares" placeholder="總股數 (1張=1000)" required style="width: 140px;">
         <input type="number" id="buyPrice" placeholder="買進均價" required step="0.01" style="width: 120px;">
-        <button id="addBtn" class="btn-primary" onclick="addRecord()" disabled>新增至紀錄</button>
+        <button id="addBtn" class="btn-primary" onclick="addRecord()" disabled>新增紀錄</button>
     </div>
 
     <hr>
@@ -61,13 +59,12 @@
             <tr>
                 <th>代號</th>
                 <th>名稱</th>
-                <th>股數</th>
-                <th>均價</th>
-                <th>即時報價</th>
-                <th>預估淨損益<br><span class="fee-hint">(已扣除費/稅)</span></th>
-                <th style="width: 130px;">近期配息資訊<br><span class="fee-hint">(日期 / 金額)</span></th>
-                <th>試算本期可領股利</th>
-                <th style="width: 250px;">最新頭條新聞</th>
+                <th>持有股數</th>
+                <th>買進均價</th>
+                <th>最新報價</th>
+                <th>預估淨損益<br><span class="fee-hint">(已扣買賣費與稅)</span></th>
+                <th>近期配息紀錄</th>
+                <th>預估可領股利<br><span class="fee-hint">(依近期配息試算)</span></th>
                 <th>操作</th>
             </tr>
         </thead>
@@ -79,42 +76,33 @@
     let portfolio = JSON.parse(localStorage.getItem('twStockPortfolio')) || [];
     let marketData = {};
 
-    async function fetchJsonViaProxy(url) {
-        const proxy = 'https://api.allorigins.win/raw?url=';
-        try {
-            const res = await fetch(proxy + encodeURIComponent(url));
-            if (res.ok) return await res.json();
-        } catch(e) {}
+    // 抓取政府資料
+    async function fetchGovData(url) {
+        const timestamp = new Date().getTime();
+        const targetUrl = encodeURIComponent(url + '?_t=' + timestamp);
+        const proxies = ['https://corsproxy.io/?' + targetUrl, 'https://api.allorigins.win/raw?url=' + targetUrl];
+        for (let p of proxies) {
+            try {
+                const res = await fetch(p);
+                if (res.ok) return await res.json();
+            } catch(e) {}
+        }
         return null;
     }
 
+    // 初始化市場名稱資料
     async function initMarketData() {
-        let loaded = 0;
         const statusEl = document.getElementById('status');
-        statusEl.innerHTML = '⏳ 正在驗證股票代碼庫...';
+        statusEl.innerHTML = '⏳ 正在連線政府資料庫...';
 
-        const twseUrl = 'https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL?_t=' + new Date().getTime();
-        const tpexUrl = 'https://www.tpex.org.tw/openapi/v1/t187ap14_L?_t=' + new Date().getTime();
+        const twseData = await fetchGovData('https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL');
+        if (twseData) twseData.forEach(stock => { marketData[stock.Code] = { name: stock.Name, market: 'TW', price: parseFloat(stock.ClosingPrice) }; });
 
-        const twseData = await fetchJsonViaProxy(twseUrl);
-        if (twseData) {
-            twseData.forEach(stock => { marketData[stock.Code] = { name: stock.Name, market: 'TW', price: parseFloat(stock.ClosingPrice) }; });
-            loaded++;
-        }
+        const tpexData = await fetchGovData('https://www.tpex.org.tw/openapi/v1/t187ap14_L');
+        if (tpexData) tpexData.forEach(stock => { marketData[stock.SecuritiesCompanyCode] = { name: stock.CompanyName, market: 'TWO', price: parseFloat(stock.Close) }; });
 
-        const tpexData = await fetchJsonViaProxy(tpexUrl);
-        if (tpexData) {
-            tpexData.forEach(stock => { marketData[stock.SecuritiesCompanyCode] = { name: stock.CompanyName, market: 'TWO', price: parseFloat(stock.Close) }; });
-            loaded++;
-        }
-
-        if (loaded > 0) {
-            document.getElementById('addBtn').disabled = false;
-            await renderTable(); 
-        } else {
-            statusEl.innerHTML = '❌ 連線失敗，請重新整理網頁。';
-            statusEl.style.color = '#dc3545';
-        }
+        document.getElementById('addBtn').disabled = false;
+        await renderTable(); 
     }
 
     function addRecord() {
@@ -140,15 +128,16 @@
         }
     }
 
+    // 渲染表格與計算
     async function renderTable() {
         const statusEl = document.getElementById('status');
         if(portfolio.length > 0) {
-            statusEl.innerHTML = '🔄 正在全自動抓取即時報價、配息與最新新聞...';
+            statusEl.innerHTML = '🔄 正在精準同步最新報價與配息...';
             statusEl.style.color = '#007bff';
         }
 
         const tbody = document.getElementById('tableBody');
-        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding:20px;">資料運算與抓取中，請稍候...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:20px;">資料更新中，請稍候...</td></tr>';
         
         const discount = parseFloat(document.getElementById('discount').value); 
         let totalNetPlAll = 0;
@@ -159,47 +148,42 @@
             const stockInfo = marketData[record.symbol] || { name: '未知', market: 'TW', price: record.buyPrice };
             const suffix = stockInfo.market === 'TWO' ? '.TWO' : '.TW';
             
-            // 1. 同時抓取 Yahoo 的股價與配息資料
-            const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${record.symbol}${suffix}?interval=1d&events=div`;
-            const chartData = await fetchJsonViaProxy(chartUrl);
-            
+            // 強制破除快取，獲取最新價格與配息
+            const ts = new Date().getTime();
+            const chartUrl = encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${record.symbol}${suffix}?interval=1d&events=div&_t=${ts}`);
             let currentPrice = stockInfo.price;
-            let divText = '尚無近期配息';
+            let divText = '<span style="color:#999;">查無近期配息</span>';
             let divAmount = 0;
 
-            if (chartData && chartData.chart.result) {
-                const result = chartData.chart.result[0];
-                currentPrice = result.meta.regularMarketPrice || currentPrice;
-                
-                // 解析配息
-                if (result.events && result.events.dividends) {
-                    const divs = Object.values(result.events.dividends).sort((a, b) => b.date - a.date);
-                    if (divs.length > 0) {
-                        const latestDiv = divs[0];
-                        divAmount = latestDiv.amount;
-                        const d = new Date(latestDiv.date * 1000);
-                        divText = `${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()} <br>配發 <span style="color:red;">${divAmount}</span> 元`;
+            try {
+                const res = await fetch('https://corsproxy.io/?' + chartUrl);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.chart && data.chart.result) {
+                        const result = data.chart.result[0];
+                        currentPrice = result.meta.regularMarketPrice || currentPrice; // 確保是最新的收盤價
+                        
+                        // 抓取近期配息紀錄
+                        if (result.events && result.events.dividends) {
+                            const divs = Object.values(result.events.dividends).sort((a, b) => b.date - a.date);
+                            if (divs.length > 0) {
+                                const latestDiv = divs[0];
+                                divAmount = latestDiv.amount;
+                                const d = new Date(latestDiv.date * 1000);
+                                divText = `${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()} <br>配發 <span class="div-amount">${divAmount.toFixed(3)}</span> 元`;
+                            }
+                        }
                     }
                 }
-            }
+            } catch(e) {}
 
-            // 2. 抓取 Yahoo 的最新頭條新聞
-            const searchUrl = `https://query2.finance.yahoo.com/v1/finance/search?q=${record.symbol}${suffix}`;
-            const searchData = await fetchJsonViaProxy(searchUrl);
-            
-            let newsHtml = '<span style="color:#999;">目前無相關新聞</span>';
-            if (searchData && searchData.news && searchData.news.length > 0) {
-                const latestNews = searchData.news[0];
-                newsHtml = `<a href="${latestNews.link}" target="_blank" class="news-link">📰 ${latestNews.title}</a>`;
-            }
-
-            // 3. 費用與損益計算
+            // 費用計算 (無折扣 = discount 1.0)
             const baseCost = record.shares * record.buyPrice;
-            const buyFee = Math.max(20, Math.floor(baseCost * 0.001425 * discount)) * (discount === 0 ? 0 : 1);
+            const buyFee = Math.max(20, Math.floor(baseCost * 0.001425 * discount));
             const realTotalCost = baseCost + buyFee; 
 
             const baseValue = record.shares * currentPrice;
-            const sellFee = Math.max(20, Math.floor(baseValue * 0.001425 * discount)) * (discount === 0 ? 0 : 1);
+            const sellFee = Math.max(20, Math.floor(baseValue * 0.001425 * discount));
             const taxRate = record.symbol.startsWith('00') ? 0.001 : 0.003;
             const sellTax = Math.floor(baseValue * taxRate);
             
@@ -210,8 +194,8 @@
             const plSign = netPl >= 0 ? '+' : '';
             
             // 試算可領股利
-            const estDividend = Math.round(record.shares * divAmount);
-            const estDividendText = estDividend > 0 ? `<span style="color:#28a745; font-weight:bold;">$${estDividend.toLocaleString()}</span>` : '-';
+            const estDividend = Math.floor(record.shares * divAmount);
+            const estDividendText = estDividend > 0 ? `<span style="color:#28a745; font-weight:bold; font-size:1.1em;">$${estDividend.toLocaleString()}</span>` : '-';
 
             htmlContent += `
                 <tr>
@@ -222,11 +206,10 @@
                     <td class="realtime-price">${currentPrice.toFixed(2)}</td>
                     <td class="${plClass}">
                         ${plSign}${Math.round(netPl).toLocaleString()}
-                        <span class="fee-hint">(手續/稅: ${buyFee + sellFee + sellTax}元)</span>
+                        <span class="fee-hint">(扣手續/稅: ${buyFee + sellFee + sellTax}元)</span>
                     </td>
                     <td class="div-info">${divText}</td>
                     <td style="text-align:center;">${estDividendText}</td>
-                    <td>${newsHtml}</td>
                     <td class="action-cell">
                         <button class="btn-danger" onclick="deleteRecord(${i})">刪除</button>
                     </td>
@@ -239,17 +222,17 @@
             const totalPlSign = totalNetPlAll >= 0 ? '+' : '';
             htmlContent += `
                 <tr style="background-color: #f8f9fa; font-weight: bold;">
-                    <td colspan="5" style="text-align: center;">投資組合總淨損益：</td>
-                    <td class="${totalPlClass}" style="font-size:1.1em;">${totalPlSign}${Math.round(totalNetPlAll).toLocaleString()}</td>
-                    <td colspan="4"></td>
+                    <td colspan="5" style="text-align: center; font-size:1.1em;">投資組合總淨損益：</td>
+                    <td class="${totalPlClass}" style="font-size:1.2em;">${totalPlSign}${Math.round(totalNetPlAll).toLocaleString()}</td>
+                    <td colspan="3"></td>
                 </tr>
             `;
         } else {
-            htmlContent = '<tr><td colspan="10" style="text-align:center;">目前沒有任何交易紀錄</td></tr>';
+            htmlContent = '<tr><td colspan="9" style="text-align:center;">目前沒有任何交易紀錄</td></tr>';
         }
         
         tbody.innerHTML = htmlContent;
-        statusEl.innerHTML = '✅ 所有資料已更新為最新狀態！';
+        statusEl.innerHTML = '✅ 報價與配息資料已更新至最新狀態！';
         statusEl.style.color = '#28a745';
     }
 
