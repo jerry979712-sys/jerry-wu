@@ -9,15 +9,19 @@
         .container { background-color: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         .input-group { margin-bottom: 15px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
         input, select, button { padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
-        .setting-box { background-color: #f1f8ff; padding: 10px; border-radius: 4px; border: 1px solid #cce5ff; margin-bottom: 15px; font-size: 0.9em; }
+        .setting-box { background-color: #f1f8ff; padding: 10px; border-radius: 4px; border: 1px solid #cce5ff; margin-bottom: 15px; font-size: 0.9em; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;}
         .btn-primary { background-color: #007bff; color: white; border: none; cursor: pointer; }
         .btn-primary:hover { background-color: #0056b3; }
         .btn-primary:disabled { background-color: #cccccc; cursor: not-allowed; }
         .btn-danger { background-color: #dc3545; color: white; border: none; cursor: pointer; padding: 5px 10px; border-radius: 3px; font-size: 0.85em; }
         .btn-danger:hover { background-color: #c82333; }
+        .btn-info { background-color: #17a2b8; color: white; border: none; cursor: pointer; padding: 6px 10px; border-radius: 4px; font-size: 0.9em; margin-left: 5px;}
+        .btn-info:hover { background-color: #138496; }
         table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.95em; }
         th, td { border: 1px solid #eee; padding: 12px 10px; text-align: right; vertical-align: middle; }
         th { background-color: #f2f2f2; text-align: center; }
+        th.sortable { cursor: pointer; transition: background-color 0.2s; user-select: none; }
+        th.sortable:hover { background-color: #e2e2e2; }
         td:first-child, td:nth-child(2) { text-align: left; font-weight: bold; }
         td.action-cell { text-align: center; }
         .profit { color: #28a745; font-weight: bold; }
@@ -36,14 +40,19 @@
     <div id="status">啟動中...</div>
     
     <div class="setting-box">
-        <label for="discount">⚙️ 券商手續費設定：</label>
-        <select id="discount" onchange="renderTable()">
-            <option value="1.0" selected>無折扣 (全額收取手續費)</option>
-            <option value="0.5">5 折</option>
-            <option value="0.28">2.8 折</option>
-            <option value="0.2">2 折</option>
-        </select>
-        <span style="color: #666; margin-left: 10px;">(系統會自動扣除買賣手續費與證交稅)</span>
+        <div>
+            <label for="discount">⚙️ 券商手續費設定：</label>
+            <select id="discount" onchange="renderTable()">
+                <option value="1.0" selected>無折扣 (全額收取)</option>
+                <option value="0.5">5 折</option>
+                <option value="0.28">2.8 折</option>
+                <option value="0.2">2 折</option>
+            </select>
+        </div>
+        <div>
+            <button class="btn-info" onclick="exportData()">📲 產生手機同步碼</button>
+            <button class="btn-info" onclick="importData()">📥 匯入同步碼</button>
+        </div>
     </div>
 
     <div class="input-group">
@@ -59,12 +68,12 @@
             <tr>
                 <th>代號</th>
                 <th>名稱</th>
-                <th>持有股數</th>
+                <th class="sortable" onclick="setSort('shares')" title="點擊排序">持有股數 ↕️</th>
                 <th>買進均價</th>
-                <th>最新報價</th>
-                <th>預估淨損益<br><span class="fee-hint">(已扣買賣費與稅)</span></th>
+                <th class="sortable" onclick="setSort('currentPrice')" title="點擊排序">最新報價 ↕️</th>
+                <th class="sortable" onclick="setSort('netPl')" title="點擊排序">預估淨損益 ↕️<br><span class="fee-hint">(已扣買賣費與稅)</span></th>
                 <th>近期配息紀錄</th>
-                <th>預估可領股利<br><span class="fee-hint">(依近期配息試算)</span></th>
+                <th class="sortable" onclick="setSort('estDividend')" title="點擊排序">預估可領股利 ↕️<br><span class="fee-hint">(依近期配息試算)</span></th>
                 <th>操作</th>
             </tr>
         </thead>
@@ -75,6 +84,9 @@
 <script>
     let portfolio = JSON.parse(localStorage.getItem('twStockPortfolio')) || [];
     let marketData = {};
+    let liveDataCache = {}; 
+    let sortCol = 'index';
+    let sortAsc = true;
 
     async function fetchGovData(url) {
         const timestamp = new Date().getTime();
@@ -90,9 +102,7 @@
     }
 
     async function initMarketData() {
-        const statusEl = document.getElementById('status');
-        statusEl.innerHTML = '⏳ 正在連線政府資料庫...';
-
+        document.getElementById('status').innerHTML = '⏳ 正在連線政府資料庫...';
         const twseData = await fetchGovData('https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL');
         if (twseData) twseData.forEach(stock => { marketData[stock.Code] = { name: stock.Name, market: 'TW', price: parseFloat(stock.ClosingPrice) }; });
 
@@ -100,7 +110,53 @@
         if (tpexData) tpexData.forEach(stock => { marketData[stock.SecuritiesCompanyCode] = { name: stock.CompanyName, market: 'TWO', price: parseFloat(stock.Close) }; });
 
         document.getElementById('addBtn').disabled = false;
-        await renderTable(); 
+        refreshLiveData();
+    }
+
+    // 將「抓取價格」與「顯示表格」分開，讓排序瞬間完成不卡頓
+    async function refreshLiveData() {
+        if(portfolio.length > 0) {
+            document.getElementById('status').innerHTML = '🔄 正在精準同步最新報價與配息紀錄...';
+        }
+        const ts = new Date().getTime();
+
+        for (let record of portfolio) {
+            if (liveDataCache[record.symbol]) continue; // 已經抓過就不重抓
+
+            const stockInfo = marketData[record.symbol] || { market: 'TW' };
+            const suffix = stockInfo.market === 'TWO' ? '.TWO' : '.TW';
+            const chartUrl = encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${record.symbol}${suffix}?range=1y&interval=1d&events=div&_t=${ts}`);
+            
+            let currentPrice = stockInfo.price || record.buyPrice;
+            let divText = '<span style="color:#999;">查無近期配息</span>';
+            let divAmount = 0;
+
+            try {
+                const res = await fetch('https://corsproxy.io/?' + chartUrl);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.chart && data.chart.result) {
+                        const result = data.chart.result[0];
+                        currentPrice = result.meta.regularMarketPrice || currentPrice; 
+                        
+                        if (result.events && result.events.dividends) {
+                            const divs = Object.values(result.events.dividends).sort((a, b) => b.date - a.date);
+                            if (divs.length > 0) {
+                                const latestDiv = divs[0];
+                                divAmount = latestDiv.amount;
+                                const d = new Date(latestDiv.date * 1000);
+                                divText = `${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()} <br>配發 <span class="div-amount">${divAmount.toFixed(3)}</span> 元`;
+                            }
+                        }
+                    }
+                }
+            } catch(e) {}
+            
+            liveDataCache[record.symbol] = { price: currentPrice, divText: divText, divAmount: divAmount };
+        }
+        document.getElementById('status').innerHTML = '✅ 報價與配息資料已更新至最新狀態！';
+        document.getElementById('status').style.color = '#28a745';
+        renderTable();
     }
 
     function addRecord() {
@@ -115,103 +171,131 @@
         localStorage.setItem('twStockPortfolio', JSON.stringify(portfolio));
         
         document.getElementById('symbol').value = ''; document.getElementById('shares').value = ''; document.getElementById('buyPrice').value = '';
-        renderTable();
+        refreshLiveData(); // 抓取新股票的報價並重繪
     }
 
     function deleteRecord(index) {
         if (confirm('確定要刪除這筆紀錄嗎？')) {
             portfolio.splice(index, 1);
             localStorage.setItem('twStockPortfolio', JSON.stringify(portfolio));
-            renderTable();
+            renderTable(); // 刪除不需重抓資料，直接重繪即可
         }
     }
 
-    async function renderTable() {
-        const statusEl = document.getElementById('status');
-        if(portfolio.length > 0) {
-            statusEl.innerHTML = '🔄 正在精準同步最新報價與配息紀錄...';
-            statusEl.style.color = '#007bff';
+    function setSort(col) {
+        if (sortCol === col) {
+            sortAsc = !sortAsc; // 反向排序
+        } else {
+            sortCol = col;
+            sortAsc = false; // 預設由大排到小
         }
+        renderTable();
+    }
 
+    // 同步功能邏輯
+    function exportData() {
+        const data = localStorage.getItem('twStockPortfolio');
+        if(!data || data === '[]') {
+            alert('目前沒有資料可以匯出喔！'); return;
+        }
+        const encoded = btoa(encodeURIComponent(data));
+        prompt('請複製以下「同步碼」，傳到手機上的 LINE，再從手機網頁點選「匯入」：', encoded);
+    }
+
+    function importData() {
+        const encoded = prompt('請貼上從電腦傳來的「同步碼」：\n(⚠️警告：這會覆蓋當前裝置上的資料)');
+        if (encoded) {
+            try {
+                const decodedJson = decodeURIComponent(atob(encoded));
+                JSON.parse(decodedJson); 
+                localStorage.setItem('twStockPortfolio', decodedJson);
+                portfolio = JSON.parse(decodedJson);
+                liveDataCache = {}; // 清空快取強制重抓
+                alert('✅ 資料跨裝置同步成功！');
+                refreshLiveData();
+            } catch (e) {
+                alert('❌ 同步碼格式錯誤，請確認沒有複製漏掉字元。');
+            }
+        }
+    }
+
+    function renderTable() {
         const tbody = document.getElementById('tableBody');
-        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:20px;">資料更新中，請稍候...</td></tr>';
-        
         const discount = parseFloat(document.getElementById('discount').value); 
-        let totalNetPlAll = 0;
-        let htmlContent = '';
+        let rowObjects = [];
+        let totalNetPlAll = 0, totalValueAll = 0, totalCostAll = 0;
 
         for (let i = 0; i < portfolio.length; i++) {
             const record = portfolio[i];
-            const stockInfo = marketData[record.symbol] || { name: '未知', market: 'TW', price: record.buyPrice };
-            const suffix = stockInfo.market === 'TWO' ? '.TWO' : '.TW';
+            const stockInfo = marketData[record.symbol] || { name: '未知' };
+            const liveInfo = liveDataCache[record.symbol] || { price: record.buyPrice, divAmount: 0, divText: '載入中...' };
             
-            // 【修復點】：加入 range=1y 讓 Yahoo 吐出過去一年的除息紀錄
-            const ts = new Date().getTime();
-            const chartUrl = encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${record.symbol}${suffix}?range=1y&interval=1d&events=div&_t=${ts}`);
-            
-            let currentPrice = stockInfo.price;
-            let divText = '<span style="color:#999;">查無近期配息</span>';
-            let divAmount = 0;
-
-            try {
-                const res = await fetch('https://corsproxy.io/?' + chartUrl);
-                if (res.ok) {
-                    const data = await res.json();
-                    if (data.chart && data.chart.result) {
-                        const result = data.chart.result[0];
-                        currentPrice = result.meta.regularMarketPrice || currentPrice; 
-                        
-                        // 解析過去一年的配息紀錄
-                        if (result.events && result.events.dividends) {
-                            const divs = Object.values(result.events.dividends).sort((a, b) => b.date - a.date);
-                            if (divs.length > 0) {
-                                const latestDiv = divs[0];
-                                divAmount = latestDiv.amount;
-                                const d = new Date(latestDiv.date * 1000);
-                                divText = `${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()} <br>配發 <span class="div-amount">${divAmount.toFixed(3)}</span> 元`;
-                            }
-                        }
-                    }
-                }
-            } catch(e) {}
-
             const baseCost = record.shares * record.buyPrice;
-            const buyFee = Math.max(20, Math.floor(baseCost * 0.001425 * discount));
+            const buyFee = Math.max(20, Math.floor(baseCost * 0.001425 * discount)) * (discount === 0 ? 0 : 1);
             const realTotalCost = baseCost + buyFee; 
 
-            const baseValue = record.shares * currentPrice;
-            const sellFee = Math.max(20, Math.floor(baseValue * 0.001425 * discount));
+            const baseValue = record.shares * liveInfo.price;
+            const sellFee = Math.max(20, Math.floor(baseValue * 0.001425 * discount)) * (discount === 0 ? 0 : 1);
             const taxRate = record.symbol.startsWith('00') ? 0.001 : 0.003;
             const sellTax = Math.floor(baseValue * taxRate);
             
             const netPl = baseValue - sellFee - sellTax - realTotalCost;
-            totalNetPlAll += netPl;
+            const estDividend = Math.floor(record.shares * liveInfo.divAmount);
 
-            const plClass = netPl >= 0 ? 'profit' : 'loss';
-            const plSign = netPl >= 0 ? '+' : '';
+            totalCostAll += realTotalCost;
+            totalValueAll += baseValue;
+            totalNetPlAll += netPl;
             
-            const estDividend = Math.floor(record.shares * divAmount);
-            const estDividendText = estDividend > 0 ? `<span style="color:#28a745; font-weight:bold; font-size:1.1em;">$${estDividend.toLocaleString()}</span>` : '-';
+            rowObjects.push({
+                originalIndex: i,
+                symbol: record.symbol,
+                name: stockInfo.name,
+                shares: record.shares,
+                buyPrice: record.buyPrice,
+                currentPrice: liveInfo.price,
+                netPl: netPl,
+                feeTax: buyFee + sellFee + sellTax,
+                divText: liveInfo.divText,
+                estDividend: estDividend
+            });
+        }
+
+        // 執行排序
+        if (sortCol !== 'index') {
+            rowObjects.sort((a, b) => {
+                let valA = a[sortCol]; let valB = b[sortCol];
+                if (valA < valB) return sortAsc ? -1 : 1;
+                if (valA > valB) return sortAsc ? 1 : -1;
+                return 0;
+            });
+        }
+
+        // 生成 HTML
+        let htmlContent = '';
+        rowObjects.forEach(row => {
+            const plClass = row.netPl >= 0 ? 'profit' : 'loss';
+            const plSign = row.netPl >= 0 ? '+' : '';
+            const estDividendText = row.estDividend > 0 ? `<span style="color:#28a745; font-weight:bold; font-size:1.1em;">$${row.estDividend.toLocaleString()}</span>` : '-';
 
             htmlContent += `
                 <tr>
-                    <td>${record.symbol}</td>
-                    <td>${stockInfo.name}</td>
-                    <td>${record.shares.toLocaleString()}</td>
-                    <td>${record.buyPrice.toFixed(2)}</td>
-                    <td class="realtime-price">${currentPrice.toFixed(2)}</td>
+                    <td>${row.symbol}</td>
+                    <td>${row.name}</td>
+                    <td>${row.shares.toLocaleString()}</td>
+                    <td>${row.buyPrice.toFixed(2)}</td>
+                    <td class="realtime-price">${row.currentPrice.toFixed(2)}</td>
                     <td class="${plClass}">
-                        ${plSign}${Math.round(netPl).toLocaleString()}
-                        <span class="fee-hint">(扣手續/稅: ${buyFee + sellFee + sellTax}元)</span>
+                        ${plSign}${Math.round(row.netPl).toLocaleString()}
+                        <span class="fee-hint">(扣手續/稅: ${row.feeTax}元)</span>
                     </td>
-                    <td class="div-info">${divText}</td>
+                    <td class="div-info">${row.divText}</td>
                     <td style="text-align:center;">${estDividendText}</td>
                     <td class="action-cell">
-                        <button class="btn-danger" onclick="deleteRecord(${i})">刪除</button>
+                        <button class="btn-danger" onclick="deleteRecord(${row.originalIndex})">刪除</button>
                     </td>
                 </tr>
             `;
-        }
+        });
 
         if(portfolio.length > 0) {
             const totalPlClass = totalNetPlAll >= 0 ? 'profit' : 'loss';
@@ -227,9 +311,7 @@
             htmlContent = '<tr><td colspan="9" style="text-align:center;">目前沒有任何交易紀錄</td></tr>';
         }
         
-        tbody.innerHTML = htmlContent;
-        statusEl.innerHTML = '✅ 報價與配息資料已更新至最新狀態！';
-        statusEl.style.color = '#28a745';
+        document.getElementById('tableBody').innerHTML = htmlContent;
     }
 
     initMarketData();
