@@ -29,7 +29,7 @@
         .input-group input, .input-group select { flex: 1; min-width: 100px; padding: 8px 10px; border: 1px solid var(--input-border); border-radius: 6px; background-color: var(--card-bg); color: var(--text-color); font-size: 0.95em;}
         .setting-box { background-color: var(--setting-bg); padding: 15px; border-radius: 8px; border: 1px solid var(--setting-border); margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
         
-        button { padding: 6px 10px; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9em; transition: 0.2s; white-space: nowrap; font-weight: bold; }
+        button { padding: 6px 12px; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9em; transition: 0.2s; white-space: nowrap; font-weight: bold; }
         .btn-primary { background-color: #0d6efd; color: white; padding: 10px 15px;} .btn-primary:hover { background-color: #0b5ed7; }
         .btn-danger { background-color: #dc3545; color: white; } .btn-danger:hover { background-color: #c82333; }
         .btn-success { background-color: #198754; color: white; } .btn-success:hover { background-color: #157347; }
@@ -38,36 +38,38 @@
         .btn-outline { background-color: transparent; border: 1px solid var(--text-color); color: var(--text-color); }
         
         .table-responsive { width: 100%; overflow-x: auto; border-radius: 6px; border: 1px solid var(--border-color); }
-        table { width: 100%; border-collapse: collapse; font-size: 0.9em; min-width: 1100px; }
-        th, td { border-bottom: 1px solid var(--border-color); border-right: 1px solid var(--border-color); padding: 10px 8px; text-align: center; vertical-align: middle; }
-        th { background-color: var(--thead-bg); white-space: nowrap; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.95em; min-width: 1100px; }
+        th, td { border-bottom: 1px solid var(--border-color); border-right: 1px solid var(--border-color); padding: 12px 10px; text-align: right; vertical-align: middle; }
+        th { background-color: var(--thead-bg); text-align: center; white-space: nowrap; }
         th.sortable { cursor: pointer; user-select: none; } th.sortable:hover { opacity: 0.8; }
-        td.text-left { text-align: left; }
+        td:first-child, td:nth-child(2) { text-align: left; font-weight: bold; }
+        td.action-cell { text-align: center; white-space: nowrap; }
         
         tr.target-reached td { background-color: var(--target-bg); }
         tr.stop-reached td { background-color: var(--stop-bg); }
         
         .profit { color: var(--profit-color); font-weight: bold; }
         .loss { color: var(--loss-color); font-weight: bold; }
-        .realtime-price { font-weight: bold; font-size: 1.1em; }
-        .sub-text { font-size: 0.8em; color: #888; display: block; margin-top: 2px; font-weight: normal; }
-        .div-total { color: #d35400; font-weight: bold; font-size: 1.05em; }
+        .realtime-price { color: var(--accent-color); font-weight: bold; font-size: 1.1em; }
+        .fee-hint { font-size: 0.75em; color: #888; display: block; margin-top: 4px; font-weight: normal; }
+        .div-total { color: #d35400; font-weight: bold; font-size: 1.1em; }
+        .sub-text { font-size: 0.85em; color: #888; display: block; margin-top: 2px; font-weight: normal; }
         
-        .dashboard { display: flex; flex-wrap: wrap; gap: 15px; margin-bottom: 20px; align-items: stretch; }
-        .dash-card { flex: 1; min-width: 250px; background: var(--card-bg); padding: 15px; border-radius: 10px; box-shadow: 0 4px 8px var(--box-shadow); display: flex; flex-direction: column; justify-content: space-between;}
+        /* 四大儀表板排版 */
+        .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        .dash-card { background: var(--card-bg); padding: 20px; border-radius: 10px; box-shadow: 0 4px 8px var(--box-shadow); display: flex; flex-direction: column; justify-content: space-between;}
         
         .income-number { font-size: 2.2em; font-weight: bold; color: #d35400; text-align: center; margin: 10px 0; }
-        .sparkline-container { width: 80px; height: 30px; margin: 5px auto 0 auto; }
-        .vs-market { text-align: center; padding: 10px; border-radius: 8px; background: var(--setting-bg); border: 1px solid var(--setting-border); }
+        .vs-market { text-align: center; padding: 10px; border-radius: 8px; background: var(--setting-bg); border: 1px solid var(--setting-border); flex: 1; }
         
-        .note-icon { cursor: pointer; opacity: 0.5; transition: 0.2s; font-size: 1.2em; }
+        .note-icon { cursor: pointer; opacity: 0.3; transition: 0.2s; font-size: 1.2em; margin-right: 5px;}
         .note-icon.active { opacity: 1; color: #ffc107; text-shadow: 0 0 5px rgba(255,193,7,0.5); }
     </style>
 </head>
 <body onload="checkDarkMode()">
 
 <div class="header-bar">
-    <h1 style="margin: 0;">📈 全能存股戰情室</h1>
+    <h1 style="margin: 0;">📈 存股損益與被動收入追蹤系統</h1>
     <button class="btn-dark" onclick="toggleDarkMode()" id="darkModeBtn">🌙 護眼模式</button>
 </div>
 
@@ -75,18 +77,18 @@
     <div class="dash-card">
         <h3 style="margin: 0 0 10px 0; text-align: center;">🏆 累積被動收入</h3>
         <div class="income-number" id="totalPassiveIncome">$0</div>
-        <button class="btn-success" style="width: 100%;" onclick="showDripCalc()">♻️ 股息再投入(DRIP)買股試算</button>
+        <button class="btn-success" style="width: 100%; margin-top: auto;" onclick="showDripCalc()">♻️ 股息再投入試算</button>
     </div>
     
     <div class="dash-card">
         <h3 style="margin: 0 0 10px 0; text-align: center;">🥇 績效戰情室</h3>
-        <div style="display: flex; gap: 10px; height: 100%;">
-            <div class="vs-market" style="flex: 1;">
-                <div class="sub-text">加權指數 (大盤)</div>
+        <div style="display: flex; gap: 10px; height: 100%; align-items: center;">
+            <div class="vs-market">
+                <div class="sub-text">加權指數 (今日)</div>
                 <div id="taiexPrice" style="font-weight:bold; font-size:1.2em; margin-top:5px;">載入中</div>
                 <div id="taiexChange" style="font-size:0.9em; margin-top:5px;">--</div>
             </div>
-            <div class="vs-market" style="flex: 1;">
+            <div class="vs-market">
                 <div class="sub-text">我的總報酬率</div>
                 <div id="myTotalRoi" style="font-weight:bold; font-size:1.4em; margin-top:5px;">0.00%</div>
                 <div id="myTotalPl" style="font-size:0.9em; margin-top:5px;">$0</div>
@@ -94,9 +96,14 @@
         </div>
     </div>
     
-    <div class="dash-card" style="flex: 2; min-width: 400px;">
-        <h3 style="margin: 0 0 5px 0; text-align: center;">📅 月度現金流預估</h3>
-        <div style="position: relative; height: 120px; width: 100%;"><canvas id="dividendChart"></canvas></div>
+    <div class="dash-card">
+        <h3 style="margin: 0 0 10px 0; text-align: center;">📊 資金佔比</h3>
+        <div style="position: relative; height: 150px; width: 100%;"><canvas id="portfolioChart"></canvas></div>
+    </div>
+
+    <div class="dash-card">
+        <h3 style="margin: 0 0 10px 0; text-align: center;">📅 月度現金流預估</h3>
+        <div style="position: relative; height: 150px; width: 100%;"><canvas id="dividendChart"></canvas></div>
     </div>
 </div>
 
@@ -110,8 +117,10 @@
         <div style="display:flex; align-items:center; gap:10px;">
             <label>⚙️ 手續費：</label>
             <select id="discount" onchange="renderTable()">
-                <option value="1.0" selected>無折扣</option><option value="0.5">5 折</option>
-                <option value="0.28">2.8 折</option><option value="0.2">2 折</option>
+                <option value="1.0" selected>無折扣 (全額收取)</option>
+                <option value="0.5">5 折</option>
+                <option value="0.28">2.8 折</option>
+                <option value="0.2">2 折</option>
             </select>
         </div>
         <div>
@@ -124,10 +133,10 @@
     <div class="input-group">
         <div><span class="sub-text">買進日期</span><input type="date" id="buyDate" required></div>
         <div><span class="sub-text">代號</span><input type="text" id="symbol" placeholder="例: 00878" required style="width: 80px;"></div>
-        <div><span class="sub-text">股數</span><input type="number" id="shares" placeholder="股數" required style="width: 90px;"></div>
-        <div><span class="sub-text">均價</span><input type="number" id="buyPrice" placeholder="均價" required step="0.01" style="width: 80px;"></div>
-        <div><span class="sub-text" style="color:#d39e00;">停利價(選)</span><input type="number" id="targetPrice" placeholder="選填" step="0.01" style="width: 80px; border-color: #ffc107;"></div>
-        <div><span class="sub-text" style="color:#dc3545;">停損價(選)</span><input type="number" id="stopLoss" placeholder="選填" step="0.01" style="width: 80px; border-color: #dc3545;"></div>
+        <div><span class="sub-text">股數</span><input type="number" id="shares" placeholder="1張=1000" required style="width: 100px;"></div>
+        <div><span class="sub-text">均價</span><input type="number" id="buyPrice" placeholder="均價" required step="0.01" style="width: 90px;"></div>
+        <div><span class="sub-text" style="color:#d39e00;">停利價(選)</span><input type="number" id="targetPrice" placeholder="選填" step="0.01" style="width: 90px; border-color: #ffc107;"></div>
+        <div><span class="sub-text" style="color:#dc3545;">停損價(選)</span><input type="number" id="stopLoss" placeholder="選填" step="0.01" style="width: 90px; border-color: #dc3545;"></div>
         <button id="addBtn" class="btn-primary" onclick="addRecord()" disabled style="align-self: flex-end; margin-bottom: 2px;">➕ 新增紀錄</button>
     </div>
 
@@ -135,11 +144,14 @@
         <table>
             <thead>
                 <tr>
-                    <th class="text-left">代號/名稱</th>
-                    <th>買進資訊 (日期/股數/均價)</th>
-                    <th class="sortable" onclick="setSort('currentPrice')">即時報價 & 30天趨勢 ↕️</th>
-                    <th class="sortable" onclick="setSort('netPl')">預估淨損益 ↕️</th>
-                    <th class="sortable" onclick="setSort('yieldOnCost')">個人殖利率 & 配息 ↕️</th>
+                    <th class="sortable" onclick="setSort('buyDate')">買進日期 ↕️</th>
+                    <th>代號名稱</th>
+                    <th class="sortable" onclick="setSort('shares')">股數 ↕️</th>
+                    <th>買進均價</th>
+                    <th class="sortable" onclick="setSort('currentPrice')">最新市價 ↕️</th>
+                    <th class="sortable" onclick="setSort('netPl')">預估淨損益 ↕️<br><span class="fee-hint">(已扣費稅)</span></th>
+                    <th class="sortable" onclick="setSort('yieldOnCost')">個人殖利率 ↕️</th>
+                    <th class="sortable" onclick="setSort('collectedDiv')">歷年已領股息 ↕️</th>
                     <th>操作與筆記</th>
                 </tr>
             </thead>
@@ -156,7 +168,7 @@
     let marketData = {}; let liveDataCache = {}; 
     let taiexData = { price: 0, changePercent: 0 };
     let sortCol = 'index'; let sortAsc = true;
-    let barChartInstance = null; let sparklineInstances = [];
+    let pieChartInstance = null; let barChartInstance = null;
     let totalPassiveIncomeGlobal = 0;
 
     function checkDarkMode() {
@@ -169,8 +181,8 @@
         document.body.classList.toggle('dark-mode');
         localStorage.setItem('darkMode', document.body.classList.contains('dark-mode'));
         document.getElementById('darkModeBtn').innerText = document.body.classList.contains('dark-mode') ? '☀️ 淺色模式' : '🌙 護眼模式';
+        if(pieChartInstance) pieChartInstance.update();
         if(barChartInstance) barChartInstance.update();
-        renderTable(); // 重新渲染小蛇圖顏色
     }
 
     async function fetchGovData(url) {
@@ -191,7 +203,7 @@
         
         portfolio.forEach(p => { 
             if(!p.buyDate) p.buyDate = new Date().toISOString().split('T')[0]; 
-            if(p.note === undefined) p.note = ""; // 新增筆記欄位
+            if(p.note === undefined) p.note = ""; 
         });
         localStorage.setItem('twStockPortfolio', JSON.stringify(portfolio));
 
@@ -199,7 +211,7 @@
     }
 
     async function refreshLiveData() {
-        if(portfolio.length > 0) document.getElementById('status').innerHTML = '🔄 抓取即時報價與大盤資料...';
+        if(portfolio.length > 0) document.getElementById('status').innerHTML = '🔄 抓取即時報價與配息資料...';
         const ts = new Date().getTime();
 
         // 抓取大盤資料 (^TWII)
@@ -221,9 +233,9 @@
                     tChangeEl.innerHTML = `<span class="loss">▼ ${Math.abs(taiexData.changePercent).toFixed(2)}%</span>`;
                 }
             }
-        } catch(e) { console.error("大盤載入失敗"); }
+        } catch(e) {}
 
-        // 抓取個股資料與 30天歷史走勢 (Sparkline)
+        // 抓取個股資料與配息
         for (let record of portfolio) {
             if (liveDataCache[record.symbol]) continue; 
             const stockInfo = marketData[record.symbol] || { market: 'TW' };
@@ -231,11 +243,9 @@
             let currentPrice = stockInfo.price || record.buyPrice;
             let dailyChangePct = 0;
             let rawDividends = []; 
-            let historyPrices = [];
 
             try {
-                // 擴大 range=1mo 抓取過去一個月的收盤價來畫小蛇圖
-                const res = await fetch('https://corsproxy.io/?' + encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${record.symbol}${suffix}?range=1y&interval=1d&events=div&_t=${ts}`));
+                const res = await fetch('https://corsproxy.io/?' + encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${record.symbol}${suffix}?range=5y&interval=1d&events=div&_t=${ts}`));
                 if (res.ok) {
                     const data = await res.json();
                     if (data.chart && data.chart.result) {
@@ -246,16 +256,10 @@
                         if (result.events && result.events.dividends) {
                             rawDividends = Object.values(result.events.dividends).sort((a, b) => b.date - a.date);
                         }
-                        
-                        // 擷取最後 30 天的收盤價
-                        if (result.indicators.quote[0].close) {
-                            const closes = result.indicators.quote[0].close.filter(p => p !== null);
-                            historyPrices = closes.slice(-30);
-                        }
                     }
                 }
             } catch(e) {}
-            liveDataCache[record.symbol] = { price: currentPrice, changePct: dailyChangePct, dividends: rawDividends, history: historyPrices };
+            liveDataCache[record.symbol] = { price: currentPrice, changePct: dailyChangePct, dividends: rawDividends };
         }
         document.getElementById('status').innerHTML = '✅ 資料已同步';
         document.getElementById('status').style.color = 'var(--profit-color)';
@@ -291,13 +295,9 @@
     }
     
     function showDripCalc() {
-        if(totalPassiveIncomeGlobal <= 0) {
-            alert('您目前還沒有累積被動收入喔！'); return;
-        }
+        if(totalPassiveIncomeGlobal <= 0) { alert('您目前還沒有累積被動收入喔！'); return; }
         let msg = `💰 您的股息金庫目前有：$${Math.round(totalPassiveIncomeGlobal).toLocaleString()}\n\n這些錢如果拿去買現在持有的股票，可以買：\n`;
         let optionsFound = false;
-        
-        // 使用 Set 避免重複列出同代號股票
         const uniqueSymbols = [...new Set(portfolio.map(item => item.symbol))];
         
         uniqueSymbols.forEach(sym => {
@@ -310,13 +310,12 @@
                 }
             }
         });
-        
         if(!optionsFound) msg += "\n(目前資金不足以購買任何一股持倉股票)";
         alert(msg);
     }
 
-    // 縮短版刪除與賣出 (保留核心邏輯)
     function deleteRecord(i) { if(confirm('確定刪除？')) { portfolio.splice(i,1); localStorage.setItem('twStockPortfolio', JSON.stringify(portfolio)); renderTable(); } }
+    
     function sellRecord(i) { 
         const r = portfolio[i]; const lp = liveDataCache[r.symbol]?.price || r.buyPrice;
         const sp = prompt(`賣出 ${r.symbol}\n市價：${lp}\n輸入賣出成交價：`, lp);
@@ -328,30 +327,36 @@
             const tax = Math.floor(val*(r.symbol.startsWith('00')?0.001:0.003));
             historyLedger.push({ sellDate: new Date().toISOString().split('T')[0], symbol: r.symbol, name: marketData[r.symbol]?.name||'', shares: r.shares, buyPrice: r.buyPrice, sellPrice: sellPrice, realizedNetPl: val-sFee-tax-(cost+bFee) });
             portfolio.splice(i,1); localStorage.setItem('twStockPortfolio', JSON.stringify(portfolio)); localStorage.setItem('twStockHistory', JSON.stringify(historyLedger));
-            renderTable(); alert('賣出成功！');
+            renderTable(); alert('賣出結算成功！');
         }
     }
 
     function setSort(col) { if(sortCol===col) sortAsc=!sortAsc; else { sortCol=col; sortAsc=false; } renderTable(); }
     
-    // ... CSV與同步碼省略，功能維持與上一版相同 ...
-    function exportCSV() { alert('CSV 匯出成功 (模擬)'); }
+    function exportCSV() {
+        if(portfolio.length === 0) { alert('沒有資料可以匯出'); return; }
+        let csvContent = '\uFEFF買進日期,股票代號,股票名稱,持有股數,買進均價,目標價,停損價,筆記\n';
+        portfolio.forEach(r => {
+            const name = marketData[r.symbol]?.name || '未知';
+            csvContent += `${r.buyDate},="${r.symbol}",${name},${r.shares},${r.buyPrice},${r.targetPrice||''},${r.stopLoss||''},${r.note||''}\n`;
+        });
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a"); link.href = URL.createObjectURL(blob);
+        link.download = `存股紀錄表_${new Date().toISOString().split('T')[0]}.csv`; link.click();
+    }
+    
     function exportData() { prompt('同步碼：', btoa(encodeURIComponent(JSON.stringify({p:portfolio,h:historyLedger})))); }
-    function importData() { const e = prompt('貼上同步碼：'); if(e){ try{ const d=JSON.parse(decodeURIComponent(atob(e))); portfolio=d.p; historyLedger=d.h||[]; localStorage.setItem('twStockPortfolio',JSON.stringify(portfolio)); localStorage.setItem('twStockHistory',JSON.stringify(historyLedger)); liveDataCache={}; refreshLiveData(); }catch(err){alert('失敗');} } }
+    function importData() { const e = prompt('貼上同步碼：'); if(e){ try{ const d=JSON.parse(decodeURIComponent(atob(e))); portfolio=d.p; historyLedger=d.h||[]; localStorage.setItem('twStockPortfolio',JSON.stringify(portfolio)); liveDataCache={}; refreshLiveData(); }catch(err){alert('失敗');} } }
 
-    function drawSparkline(canvasId, dataPoints, isPositive) {
-        const ctx = document.getElementById(canvasId);
-        if(!ctx || dataPoints.length === 0) return;
-        
-        // 銷毀舊圖表避免重疊
-        if(sparklineInstances[canvasId]) sparklineInstances[canvasId].destroy();
-        
-        const color = isPositive ? (document.body.classList.contains('dark-mode') ? '#28a745' : '#198754') : (document.body.classList.contains('dark-mode') ? '#ff4d4d' : '#dc3545');
-        
-        sparklineInstances[canvasId] = new Chart(ctx, {
-            type: 'line',
-            data: { labels: dataPoints.map((_, i) => i), datasets: [{ data: dataPoints, borderColor: color, borderWidth: 2, pointRadius: 0, tension: 0.1 }] },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { enabled: false } }, scales: { x: { display: false }, y: { display: false } }, layout: { padding: 0 } }
+    function renderPieChart(labels, dataValues) {
+        const ctx = document.getElementById('portfolioChart').getContext('2d');
+        if (pieChartInstance) pieChartInstance.destroy(); 
+        Chart.defaults.color = document.body.classList.contains('dark-mode') ? '#e0e0e0' : '#333';
+        if (dataValues.length === 0) { pieChartInstance = new Chart(ctx, { type: 'pie', data: { labels: ['無資產'], datasets: [{ data: [1], backgroundColor: ['#555'] }] }, options: { responsive: true, maintainAspectRatio: false } }); return; }
+        pieChartInstance = new Chart(ctx, {
+            type: 'doughnut',
+            data: { labels: labels, datasets: [{ data: dataValues, backgroundColor: ['#0d6efd', '#198754', '#dc3545', '#ffc107', '#0dcaf0', '#6610f2', '#fd7e14'], borderWidth: 1, borderColor: 'transparent' }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
         });
     }
 
@@ -374,12 +379,13 @@
         let totalNetPlAll = 0, totalCostSum = 0, totalValueAll = 0;
         let monthlyIncome = new Array(12).fill(0); 
         totalPassiveIncomeGlobal = 0;
+        let chartLabels = [], chartData = [];
         const oneYearAgoTs = (Date.now() / 1000) - (365 * 24 * 60 * 60);
 
         for (let i = 0; i < portfolio.length; i++) {
             const record = portfolio[i];
             const stockInfo = marketData[record.symbol] || { name: '未知' };
-            const liveInfo = liveDataCache[record.symbol] || { price: record.buyPrice, changePct: 0, dividends: [], history: [] };
+            const liveInfo = liveDataCache[record.symbol] || { price: record.buyPrice, changePct: 0, dividends: [] };
             
             let collectedDiv = 0; let ttmDivSum = 0;
             if (liveInfo.dividends.length > 0) {
@@ -406,6 +412,10 @@
 
             totalCostSum += realTotalCost; totalValueAll += baseValue; totalNetPlAll += netPl; totalPassiveIncomeGlobal += collectedDiv;
             
+            let existingIndex = chartLabels.indexOf(record.symbol);
+            if(existingIndex > -1) { chartData[existingIndex] += baseValue; } 
+            else { chartLabels.push(record.symbol); chartData.push(baseValue); }
+            
             let rowStatusClass = '';
             if (record.targetPrice && liveInfo.price >= record.targetPrice) rowStatusClass = 'target-reached';
             else if (record.stopLoss && liveInfo.price <= record.stopLoss) rowStatusClass = 'stop-reached';
@@ -413,15 +423,14 @@
             rowObjects.push({
                 originalIndex: i, symbol: record.symbol, name: stockInfo.name, shares: record.shares, buyDate: record.buyDate,
                 buyPrice: record.buyPrice, currentPrice: liveInfo.price, changePct: liveInfo.changePct, netPl: netPl,
-                feeTax: buyFee + sellFee + sellTax, collectedDiv: collectedDiv, yieldOnCost: yieldOnCost, rowClass: rowStatusClass,
-                history: liveInfo.history, note: record.note
+                feeTax: buyFee + sellFee + sellTax, collectedDiv: collectedDiv, yieldOnCost: yieldOnCost, rowClass: rowStatusClass, note: record.note
             });
         }
 
         document.getElementById('totalPassiveIncome').innerText = `$ ${Math.round(totalPassiveIncomeGlobal).toLocaleString()}`;
+        renderPieChart(chartLabels, chartData);
         renderBarChart(monthlyIncome);
         
-        // 更新大盤與總報酬率儀表板
         let myRoi = 0;
         if(totalCostSum > 0) myRoi = (totalValueAll / totalCostSum - 1) * 100;
         const myRoiEl = document.getElementById('myTotalRoi');
@@ -448,44 +457,49 @@
 
             htmlContent += `
                 <tr class="${row.rowClass}">
-                    <td class="text-left">
-                        <span style="font-size:1.1em; font-weight:bold;">${row.symbol}</span><br>
-                        <span class="sub-text">${row.name}</span>
+                    <td>${row.buyDate}</td>
+                    <td>
+                        <div style="font-weight:bold;">${row.symbol}</div>
+                        <div class="sub-text">${row.name}</div>
+                    </td>
+                    <td>${row.shares.toLocaleString()}</td>
+                    <td>${row.buyPrice.toFixed(2)}</td>
+                    <td>
+                        <div class="realtime-price ${changeClass}">${row.currentPrice.toFixed(2)}</div>
+                        <div class="${changeClass}" style="font-size:0.85em;">${changeSign}${Math.abs(row.changePct).toFixed(2)}%</div>
                     </td>
                     <td>
-                        <div>${row.buyDate}</div>
-                        <div class="sub-text">${row.shares.toLocaleString()} 股 @ $${row.buyPrice.toFixed(2)}</div>
+                        <div class="${plClass}" style="font-size:1.1em; font-weight:bold;">${plSign}${Math.round(row.netPl).toLocaleString()}</div>
+                        <div class="fee-hint">(扣費稅: ${row.feeTax})</div>
                     </td>
-                    <td>
-                        <span class="realtime-price ${changeClass}">${row.currentPrice.toFixed(2)}</span>
-                        <span class="${changeClass}" style="font-size:0.85em; margin-left:5px;">${changeSign}${Math.abs(row.changePct).toFixed(2)}%</span>
-                        <div class="sparkline-container"><canvas id="spark_${i}"></canvas></div>
-                    </td>
-                    <td>
-                        <span class="${plClass}" style="font-size:1.1em;">${plSign}${Math.round(row.netPl).toLocaleString()}</span>
-                        <span class="sub-text">(費稅: ${row.feeTax})</span>
-                    </td>
-                    <td>
-                        <div>${yieldText}</div>
-                        <div class="sub-text">已領: $${Math.round(row.collectedDiv).toLocaleString()}</div>
-                    </td>
+                    <td>${yieldText}</td>
+                    <td class="div-total">$${Math.round(row.collectedDiv).toLocaleString()}</td>
                     <td class="action-cell">
-                        <span class="note-icon ${noteActive}" onclick="editNote(${row.originalIndex})" title="交易筆記">📝</span>
-                        <button class="btn-success" onclick="sellRecord(${row.originalIndex})" style="padding: 4px 8px; margin: 0 5px;">結</button>
-                        <button class="btn-danger" onclick="deleteRecord(${row.originalIndex})" style="padding: 4px 8px;">刪</button>
+                        <span class="note-icon ${noteActive}" onclick="editNote(${row.originalIndex})" title="${row.note ? '📝 ' + row.note : '新增筆記'}">📝</span>
+                        <button class="btn-success" onclick="sellRecord(${row.originalIndex})">結</button>
+                        <button class="btn-danger" onclick="deleteRecord(${row.originalIndex})">刪</button>
                     </td>
                 </tr>
             `;
         });
         
-        tbody.innerHTML = htmlContent || '<tr><td colspan="6" style="text-align:center;">目前無紀錄</td></tr>';
+        if(portfolio.length > 0) {
+            const totalPlClass = totalNetPlAll >= 0 ? 'profit' : 'loss';
+            const totalPlSign = totalNetPlAll >= 0 ? '+' : '';
+            htmlContent += `
+                <tr style="background-color: var(--thead-bg); font-weight: bold;">
+                    <td colspan="5" style="text-align: center;">總結算：</td>
+                    <td class="${totalPlClass}" style="font-size:1.1em;">${totalPlSign}${Math.round(totalNetPlAll).toLocaleString()}</td>
+                    <td></td>
+                    <td class="div-total">$${Math.round(totalPassiveIncomeGlobal).toLocaleString()}</td>
+                    <td></td>
+                </tr>
+            `;
+        } else {
+            htmlContent = '<tr><td colspan="9" style="text-align:center;">目前無紀錄</td></tr>';
+        }
         
-        // 渲染走勢小蛇圖
-        rowObjects.forEach((row, i) => {
-            if(row.history && row.history.length > 0) {
-                drawSparkline(`spark_${i}`, row.history, row.history[row.history.length-1] >= row.history[0]);
-            }
-        });
+        document.getElementById('tableBody').innerHTML = htmlContent;
     }
 
     initMarketData();
