@@ -38,11 +38,11 @@
         .btn-outline { background-color: transparent; border: 1px solid var(--text-color); color: var(--text-color); }
         
         .table-responsive { width: 100%; overflow-x: auto; border-radius: 6px; border: 1px solid var(--border-color); }
-        table { width: 100%; border-collapse: collapse; font-size: 0.95em; min-width: 1100px; }
-        th, td { border-bottom: 1px solid var(--border-color); border-right: 1px solid var(--border-color); padding: 12px 10px; text-align: right; vertical-align: middle; }
-        th { background-color: var(--thead-bg); text-align: center; white-space: nowrap; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.95em; min-width: 1000px; }
+        th, td { border-bottom: 1px solid var(--border-color); border-right: 1px solid var(--border-color); padding: 12px 10px; text-align: center; vertical-align: middle; }
+        th { background-color: var(--thead-bg); white-space: nowrap; }
         th.sortable { cursor: pointer; user-select: none; } th.sortable:hover { opacity: 0.8; }
-        td:first-child, td:nth-child(2) { text-align: left; font-weight: bold; }
+        td.text-left { text-align: left; }
         td.action-cell { text-align: center; white-space: nowrap; }
         
         tr.target-reached td { background-color: var(--target-bg); }
@@ -55,7 +55,6 @@
         .div-total { color: #d35400; font-weight: bold; font-size: 1.1em; }
         .sub-text { font-size: 0.85em; color: #888; display: block; margin-top: 2px; font-weight: normal; }
         
-        /* 四大儀表板排版 */
         .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px; margin-bottom: 20px; }
         .dash-card { background: var(--card-bg); padding: 20px; border-radius: 10px; box-shadow: 0 4px 8px var(--box-shadow); display: flex; flex-direction: column; justify-content: space-between;}
         
@@ -145,12 +144,11 @@
             <thead>
                 <tr>
                     <th class="sortable" onclick="setSort('buyDate')">買進日期 ↕️</th>
-                    <th>代號名稱</th>
+                    <th class="text-left">代號名稱</th>
                     <th class="sortable" onclick="setSort('shares')">股數 ↕️</th>
                     <th>買進均價</th>
                     <th class="sortable" onclick="setSort('currentPrice')">最新市價 ↕️</th>
                     <th class="sortable" onclick="setSort('netPl')">預估淨損益 ↕️<br><span class="fee-hint">(已扣費稅)</span></th>
-                    <th class="sortable" onclick="setSort('yieldOnCost')">個人殖利率 ↕️</th>
                     <th class="sortable" onclick="setSort('collectedDiv')">歷年已領股息 ↕️</th>
                     <th>操作與筆記</th>
                 </tr>
@@ -251,7 +249,13 @@
                     if (data.chart && data.chart.result) {
                         const result = data.chart.result[0];
                         currentPrice = result.meta.regularMarketPrice || currentPrice; 
-                        dailyChangePct = result.meta.regularMarketChangePercent || 0;
+                        
+                        // 【手動修復漲跌幅】：避免 API 回傳 0.00%
+                        if(result.meta.chartPreviousClose && result.meta.chartPreviousClose > 0) {
+                            dailyChangePct = ((currentPrice - result.meta.chartPreviousClose) / result.meta.chartPreviousClose) * 100;
+                        } else {
+                            dailyChangePct = result.meta.regularMarketChangePercent || 0;
+                        }
                         
                         if (result.events && result.events.dividends) {
                             rawDividends = Object.values(result.events.dividends).sort((a, b) => b.date - a.date);
@@ -327,7 +331,7 @@
             const tax = Math.floor(val*(r.symbol.startsWith('00')?0.001:0.003));
             historyLedger.push({ sellDate: new Date().toISOString().split('T')[0], symbol: r.symbol, name: marketData[r.symbol]?.name||'', shares: r.shares, buyPrice: r.buyPrice, sellPrice: sellPrice, realizedNetPl: val-sFee-tax-(cost+bFee) });
             portfolio.splice(i,1); localStorage.setItem('twStockPortfolio', JSON.stringify(portfolio)); localStorage.setItem('twStockHistory', JSON.stringify(historyLedger));
-            renderTable(); alert('賣出結算成功！');
+            renderTable(); alert('賣出結算成功！歷史帳本資料已更新。');
         }
     }
 
@@ -355,7 +359,7 @@
         if (dataValues.length === 0) { pieChartInstance = new Chart(ctx, { type: 'pie', data: { labels: ['無資產'], datasets: [{ data: [1], backgroundColor: ['#555'] }] }, options: { responsive: true, maintainAspectRatio: false } }); return; }
         pieChartInstance = new Chart(ctx, {
             type: 'doughnut',
-            data: { labels: labels, datasets: [{ data: dataValues, backgroundColor: ['#0d6efd', '#198754', '#dc3545', '#ffc107', '#0dcaf0', '#6610f2', '#fd7e14'], borderWidth: 1, borderColor: 'transparent' }] },
+            data: { labels: labels, datasets: [{ data: dataValues, backgroundColor: ['#0d6efd', '#198754', '#dc3545', '#ffc107', '#0dcaf0', '#6610f2', '#fd7e14', '#20c997', '#e83e8c'], borderWidth: 1, borderColor: 'transparent' }] },
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
         });
     }
@@ -387,13 +391,12 @@
             const stockInfo = marketData[record.symbol] || { name: '未知' };
             const liveInfo = liveDataCache[record.symbol] || { price: record.buyPrice, changePct: 0, dividends: [] };
             
-            let collectedDiv = 0; let ttmDivSum = 0;
+            let collectedDiv = 0; 
             if (liveInfo.dividends.length > 0) {
                 const buyTs = new Date(record.buyDate).getTime() / 1000;
                 liveInfo.dividends.forEach(div => {
                     if (div.date >= buyTs) collectedDiv += (div.amount * record.shares);
                     if (div.date >= oneYearAgoTs) {
-                        ttmDivSum += div.amount;
                         monthlyIncome[new Date(div.date * 1000).getMonth()] += (div.amount * record.shares);
                     }
                 });
@@ -408,7 +411,6 @@
             const sellTax = Math.floor(baseValue * (record.symbol.startsWith('00') ? 0.001 : 0.003));
             
             const netPl = baseValue - sellFee - sellTax - realTotalCost;
-            let yieldOnCost = (record.buyPrice > 0 && ttmDivSum > 0) ? (ttmDivSum / record.buyPrice) * 100 : 0;
 
             totalCostSum += realTotalCost; totalValueAll += baseValue; totalNetPlAll += netPl; totalPassiveIncomeGlobal += collectedDiv;
             
@@ -423,7 +425,7 @@
             rowObjects.push({
                 originalIndex: i, symbol: record.symbol, name: stockInfo.name, shares: record.shares, buyDate: record.buyDate,
                 buyPrice: record.buyPrice, currentPrice: liveInfo.price, changePct: liveInfo.changePct, netPl: netPl,
-                feeTax: buyFee + sellFee + sellTax, collectedDiv: collectedDiv, yieldOnCost: yieldOnCost, rowClass: rowStatusClass, note: record.note
+                feeTax: buyFee + sellFee + sellTax, collectedDiv: collectedDiv, rowClass: rowStatusClass, note: record.note
             });
         }
 
@@ -450,7 +452,6 @@
         rowObjects.forEach((row, i) => {
             const plClass = row.netPl >= 0 ? 'profit' : 'loss';
             const plSign = row.netPl >= 0 ? '+' : '';
-            const yieldText = row.yieldOnCost > 0 ? `<span style="color:#6610f2; font-weight:bold;">${row.yieldOnCost.toFixed(2)}%</span>` : '-';
             const changeClass = row.changePct >= 0 ? 'profit' : 'loss';
             const changeSign = row.changePct >= 0 ? '▲' : '▼';
             const noteActive = row.note ? 'active' : '';
@@ -458,8 +459,8 @@
             htmlContent += `
                 <tr class="${row.rowClass}">
                     <td>${row.buyDate}</td>
-                    <td>
-                        <div style="font-weight:bold;">${row.symbol}</div>
+                    <td class="text-left">
+                        <div style="font-weight:bold; font-size:1.1em;">${row.symbol}</div>
                         <div class="sub-text">${row.name}</div>
                     </td>
                     <td>${row.shares.toLocaleString()}</td>
@@ -472,7 +473,6 @@
                         <div class="${plClass}" style="font-size:1.1em; font-weight:bold;">${plSign}${Math.round(row.netPl).toLocaleString()}</div>
                         <div class="fee-hint">(扣費稅: ${row.feeTax})</div>
                     </td>
-                    <td>${yieldText}</td>
                     <td class="div-total">$${Math.round(row.collectedDiv).toLocaleString()}</td>
                     <td class="action-cell">
                         <span class="note-icon ${noteActive}" onclick="editNote(${row.originalIndex})" title="${row.note ? '📝 ' + row.note : '新增筆記'}">📝</span>
@@ -490,13 +490,12 @@
                 <tr style="background-color: var(--thead-bg); font-weight: bold;">
                     <td colspan="5" style="text-align: center;">總結算：</td>
                     <td class="${totalPlClass}" style="font-size:1.1em;">${totalPlSign}${Math.round(totalNetPlAll).toLocaleString()}</td>
-                    <td></td>
                     <td class="div-total">$${Math.round(totalPassiveIncomeGlobal).toLocaleString()}</td>
                     <td></td>
                 </tr>
             `;
         } else {
-            htmlContent = '<tr><td colspan="9" style="text-align:center;">目前無紀錄</td></tr>';
+            htmlContent = '<tr><td colspan="8" style="text-align:center;">目前無紀錄</td></tr>';
         }
         
         document.getElementById('tableBody').innerHTML = htmlContent;
