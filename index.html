@@ -26,7 +26,7 @@
         
         /* 表格手機版左右滑動 */
         .table-responsive { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 6px; border: 1px solid #eee; }
-        table { width: 100%; border-collapse: collapse; font-size: 0.95em; min-width: 800px; /* 確保表格不會在手機上被過度擠壓 */ }
+        table { width: 100%; border-collapse: collapse; font-size: 0.95em; min-width: 800px; }
         th, td { border-bottom: 1px solid #eee; border-right: 1px solid #eee; padding: 12px; text-align: right; vertical-align: middle; }
         th { background-color: #f8f9fa; text-align: center; white-space: nowrap; }
         th.sortable { cursor: pointer; user-select: none; }
@@ -41,9 +41,12 @@
         .div-amount { color: #d35400; font-weight: bold; }
         .fee-hint { font-size: 0.75em; color: #999; display: block; margin-top: 4px; font-weight: normal; }
         
-        /* 儀表板區域 (圓餅圖與進度條) */
+        /* 儀表板區域 */
         .dashboard { display: flex; flex-wrap: wrap; gap: 20px; margin-bottom: 20px; }
-        .chart-container { flex: 1; min-width: 300px; max-width: 400px; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.05); display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .chart-container { flex: 1; min-width: 300px; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
+        /* 【修復關鍵】：給圓餅圖一個絕對的高度限制，防止無限膨脹 */
+        .chart-wrapper { position: relative; height: 220px; width: 100%; } 
+        
         .progress-container { flex: 2; min-width: 300px; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.05); display: flex; flex-direction: column; justify-content: center; }
         
         /* 進度條樣式 */
@@ -56,8 +59,10 @@
 
 <div class="dashboard">
     <div class="chart-container">
-        <h3 style="margin-top: 0; margin-bottom: 10px;">資金佔比圓餅圖</h3>
-        <canvas id="portfolioChart"></canvas>
+        <h3 style="margin-top: 0; margin-bottom: 10px; text-align: center;">資金佔比圓餅圖</h3>
+        <div class="chart-wrapper">
+            <canvas id="portfolioChart"></canvas>
+        </div>
     </div>
     <div class="progress-container">
         <h3 style="margin-top: 0;">本月存股目標進度</h3>
@@ -145,7 +150,7 @@
     let liveDataCache = {}; 
     let sortCol = 'index';
     let sortAsc = true;
-    let pieChartInstance = null; // 儲存圖表實例以供更新
+    let pieChartInstance = null;
 
     async function fetchGovData(url) {
         const ts = new Date().getTime();
@@ -217,7 +222,6 @@
         if (!symbol || isNaN(shares) || isNaN(buyPrice)) { alert('請填寫完整資訊！'); return; }
         if (!marketData[symbol]) { alert(`找不到 ${symbol}，請確認代號是否正確。`); return; }
 
-        // 加入 buyDate 以供進度條計算本月投資
         portfolio.push({ symbol: symbol, shares: shares, buyPrice: buyPrice, buyDate: new Date().toISOString() });
         localStorage.setItem('twStockPortfolio', JSON.stringify(portfolio));
         
@@ -236,7 +240,6 @@
             if(isNaN(sellPrice)) { alert("請輸入有效的數字！"); return; }
             
             const discount = parseFloat(document.getElementById('discount').value); 
-            // 精算已實現損益
             const baseCost = record.shares * record.buyPrice;
             const buyFee = Math.max(20, Math.floor(baseCost * 0.001425 * discount)) * (discount === 0 ? 0 : 1);
             const realTotalCost = baseCost + buyFee; 
@@ -248,7 +251,6 @@
             
             const realizedNetPl = baseValue - sellFee - sellTax - realTotalCost;
 
-            // 移入歷史帳本
             const d = new Date();
             const dateStr = `${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()}`;
             historyLedger.push({
@@ -261,9 +263,7 @@
                 realizedNetPl: realizedNetPl
             });
             
-            // 從現有部位移除
             portfolio.splice(index, 1);
-            
             localStorage.setItem('twStockPortfolio', JSON.stringify(portfolio));
             localStorage.setItem('twStockHistory', JSON.stringify(historyLedger));
             
@@ -304,7 +304,7 @@
     }
 
     function importData() {
-        const encoded = prompt('請貼上從電腦傳來的「同步碼」：');
+        const encoded = prompt('請貼上從電腦傳來的「同步碼」：\n(⚠️警告：這會覆蓋當前裝置上的資料)');
         if (encoded) {
             try {
                 const decodedJson = JSON.parse(decodeURIComponent(atob(encoded)));
@@ -322,14 +322,12 @@
         }
     }
 
-    // 更新進度條
     function renderProgress() {
         const target = parseFloat(document.getElementById('monthlyTarget').value) || 5000;
         const now = new Date();
         let thisMonthCost = 0;
 
         portfolio.forEach(record => {
-            // 如果沒有日期(舊資料)，或是本月買進的，就納入計算
             let isThisMonth = true;
             if(record.buyDate) {
                 const bDate = new Date(record.buyDate);
@@ -343,35 +341,29 @@
         });
 
         let percent = (thisMonthCost / target) * 100;
-        if (percent > 100) percent = 100; // 避免進度條爆出框
+        if (percent > 100) percent = 100;
 
         const fillEl = document.getElementById('progressFill');
         fillEl.style.width = percent + '%';
         fillEl.innerText = Math.round(percent) + '%';
         
-        // 如果達標換成綠色
-        if(percent >= 100) {
-            fillEl.style.backgroundColor = '#198754';
-        } else {
-            fillEl.style.backgroundColor = '#0d6efd';
-        }
+        if(percent >= 100) { fillEl.style.backgroundColor = '#198754'; } 
+        else { fillEl.style.backgroundColor = '#0d6efd'; }
 
         document.getElementById('progressText').innerText = `本月已投入：${Math.round(thisMonthCost).toLocaleString()} 元`;
     }
 
-    // 畫圓餅圖
     function renderChart(labels, dataValues) {
         const ctx = document.getElementById('portfolioChart').getContext('2d');
-        if (pieChartInstance) pieChartInstance.destroy(); // 避免圖表重疊
+        if (pieChartInstance) pieChartInstance.destroy(); 
 
         if (dataValues.length === 0 || dataValues.reduce((a, b) => a + b, 0) === 0) {
-            // 無資料時畫個灰色的空圖
-            pieChartInstance = new Chart(ctx, { type: 'pie', data: { labels: ['目前無資產'], datasets: [{ data: [1], backgroundColor: ['#eee'] }] } });
+            pieChartInstance = new Chart(ctx, { type: 'pie', data: { labels: ['目前無資產'], datasets: [{ data: [1], backgroundColor: ['#eee'] }] }, options: { responsive: true, maintainAspectRatio: false } });
             return;
         }
 
         pieChartInstance = new Chart(ctx, {
-            type: 'doughnut', // 空心圓餅圖比較有質感
+            type: 'doughnut',
             data: {
                 labels: labels,
                 datasets: [{
@@ -412,7 +404,7 @@
             const totalPlSign = totalRealizedPl >= 0 ? '+' : '';
             htmlContent += `
                 <tr style="background-color: #f8f9fa; font-weight: bold;">
-                    <td colspan="5" style="text-align: center;">歷史總結算淨損益：</td>
+                    <td colspan="5" style="text-align: center;">總結算淨利：</td>
                     <td class="${totalPlClass}" style="font-size:1.1em;">${totalPlSign}${Math.round(totalRealizedPl).toLocaleString()}</td>
                     <td></td>
                 </tr>
@@ -428,8 +420,6 @@
         const discount = parseFloat(document.getElementById('discount').value); 
         let rowObjects = [];
         let totalNetPlAll = 0, totalValueAll = 0;
-        
-        // 準備給圓餅圖的資料陣列
         let chartLabels = [];
         let chartData = [];
 
@@ -453,7 +443,6 @@
             totalValueAll += baseValue;
             totalNetPlAll += netPl;
             
-            // 收集圓餅圖資料 (以個股現值為基準)
             let existingIndex = chartLabels.indexOf(record.symbol);
             if(existingIndex > -1) { chartData[existingIndex] += baseValue; } 
             else { chartLabels.push(record.symbol); chartData.push(baseValue); }
@@ -465,7 +454,6 @@
             });
         }
 
-        // 更新圓餅圖
         renderChart(chartLabels, chartData);
 
         if (sortCol !== 'index') {
